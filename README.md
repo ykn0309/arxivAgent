@@ -78,161 +78,119 @@ python app.py
 ## 首次使用指南
 
 ### 1. 配置LLM
-- 进入"设置"页面
-- 配置LLM API（base_url, api_key, model）
-- 点击"测试连接"确保配置正确
+# arxivAgent — 智能论文推荐工具
 
-### 2. 设置研究兴趣
-- 描述您的研究方向或技术兴趣
-- 系统会使用LLM精炼为专业的兴趣点描述
+简要说明：arxivAgent 使用爬虫抓取 arXiv 论文并通过配置的 LLM（大型语言模型）对论文进行评估与排序，向用户推送推荐论文、生成推荐理由与中文翻译，并支持基本的论文库管理操作。
 
-### 3. 选择关注分类
-- 从arXiv CS分区中选择感兴趣的子分区
-- 系统提供各分区的详细介绍供参考
+主要面向：研究人员 / 研究生，关注计算机科学方向的论文推荐与日常管理。
 
-### 4. 开始使用
-- 配置完成后即可开始推荐
-- 系统会在后台自动爬取相关论文
+---
 
-## 使用说明
+## 亮点功能
+- 智能推荐：基于用户兴趣与收藏摘要，由 LLM 判定并生成“推荐理由”。
+- 翻译与持久化：对被推荐的论文生成中文标题与摘要并保存到数据库。
+- 论文管理：收藏、稍后再说、不感兴趣（dislike）、批量操作与分页浏览。
+- 后台评估：可在服务启动时或手动触发对未评估论文的 LLM 批量评估。
+- 可配置：通过设置页面配置 LLM、兴趣点与关注的 arXiv 子分区。
 
-### 推荐页面
-- 采用短视频式的卡片展示
-- 每次显示一篇论文的详细信息
-- 支持三种操作：喜欢、不喜欢、稍后再说
-- 喜欢的论文会加入收藏列表
-- 稍后再说的论文可在列表中重新评估
-- 显示推荐理由（LLM生成的为什么推荐该论文）
-- 展示中文标题和摘要翻译
+---
 
-### 列表管理
-- **收藏列表**：查看所有标记为喜欢的论文
-- **稍后再说**：管理暂时不确定的论文
-- 支持分页浏览和删除操作
-- 可将稍后再说的论文移动到收藏
-- **论文详情查看**：点击论文标题展开详情面板，查看完整的中英文信息和推荐理由
+## 快速开始（开发 / 本地运行）
 
-### 设置管理
-- **LLM配置**：管理语言模型API设置
-- **兴趣点**：查看和修改研究兴趣
-- **分类设置**：调整关注的arXiv分区
-- **收藏总结**：查看基于收藏的自动总结
-- **系统维护**：手动触发爬取和清理缓存
+1. 克隆仓库并进入目录：
 
-## API接口文档
-
-### 配置管理
-- `GET /api/config/status` - 获取配置状态
-- `POST /api/config/llm` - 更新LLM配置
-- `POST /api/config/llm/test` - 测试LLM连接
-- `POST /api/config/interests` - 更新用户兴趣
-- `POST /api/config/categories` - 更新关注分类
-
-### 推荐系统
-- `GET /api/recommendation/next` - 获取下一条推荐
-- `POST /api/recommendation/feedback` - 提交用户反馈
-- `GET /api/recommendation/status` - 获取待评估论文数量
-
-### 列表管理
-- `GET /api/list/favorites` - 获取收藏列表
-- `GET /api/list/maybe-later` - 获取稍后再说列表
-- `POST /api/list/move-to-favorite` - 移动到收藏
-- `POST /api/list/delete-favorite` - 删除收藏
-- `POST /api/list/delete-maybe-later` - 删除稍后再说
-
-### 列表管理（实现细节）
-- 列表接口仍然可用用于查看和管理收藏/稍后再说的论文，但在实现层面，用户的标记现在统一存储在 `papers.user_status` 字段中（取值：`none`、`favorite`、`maybe_later`、`dislike`）。
-- 现有 API：`GET /api/list/favorites`、`GET /api/list/maybe-later` 等行为不变，但它们查询的是 `papers` 表中的 `user_status` 字段，而不再依赖独立的 `favorites` / `maybe_later` 表。
-- 对外接口：
-- `POST /api/list/move-to-favorite` - 将指定 `paper_id` 的论文标记为 `favorite`
-- `POST /api/list/delete-favorite` - 将指定 `paper_id` 的论文标记回 `none`
-- `POST /api/list/delete-maybe-later` - 将指定 `paper_id` 的论文标记回 `none`
-
-### 系统维护
-- `POST /api/system/clean-cache` - 清理缓存
-- `POST /api/system/crawl-now` - 立即爬取
-
-## 数据库结构
-
-### 主要表结构
-- **papers**: 存储爬取的论文信息（包含用户标记）
-  - 新增字段: `recommendation_reason`（推荐理由）、`chinese_title`（中文标题）、`chinese_abstract`（中文摘要）
-  - 用户标记字段: `user_status`（字符串，取值：`none`、`favorite`、`maybe_later`、`dislike`），用于替代历史上的独立 `favorites` / `maybe_later` 表
-- **config**: 系统配置信息
-
-## 开发指南
-
-### 项目结构
-```
-arxivAgent/
-├── app.py                  # Flask主应用
-├── config.py              # 配置文件
-├── requirements.txt       # Python依赖
-├── models/                # 数据模型
-│   ├── paper.py          # 论文相关模型
-│   └── user.py           # 用户相关模型
-├── services/              # 业务服务
-│   ├── arxiv_service.py  # arXiv爬虫服务
-│   ├── llm_service.py    # LLM服务
-│   └── recommendation_service.py  # 推荐服务
-├── utils/                 # 工具类
-│   └── database.py       # 数据库工具
-├── templates/             # HTML模板
-│   └── index.html
-├── static/                # 静态资源
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       ├── api.js
-│       └── main.js
-└── data/                  # 数据文件
-    └── arxiv_agent.db    # SQLite数据库
+```bash
+git clone <repo-url>
+cd arxivAgent
 ```
 
-### 扩展开发
-1. **添加新的推荐算法**：修改`recommendation_service.py`
-2. **扩展LLM支持**：在`llm_service.py`中添加新的模型支持
-3. **自定义爬虫逻辑**：修改`arxiv_service.py`
-4. **前端功能增强**：在`static/js/`目录下添加新功能
+2. 创建并激活 Python 虚拟环境：
 
-## 常见问题
+```bash
+python -m venv venv
+source venv/bin/activate   # macOS / Linux
+# venv\Scripts\activate  # Windows
+```
 
-### Q: 推荐的论文为什么推荐它？
-A: 进行推荐时，系统会生成该论文的推荐理由。可以在以下位置查看：
-- 推荐页面：卡片中直接显示推荐理由
-- 列表页面：点击论文标题打开详情面板，查看完整的推荐理由说明
+3. 安装依赖：
 
-### Q: 如何查看论文的中文标题和摘要？
-A: 系统会在推荐过程中自动生成中文翻译，并保存到数据库。可通过以下方式查看：
-- 推荐页面：标题和摘要会以中英对照形式显示
-- 列表页面：点击论文标题打开详情面板，查看完整的中英文翻译
+```bash
+pip install -r requirements.txt
+```
 
-### Q: 推荐结果不准确怎么办？
-A: 可以尝试：
-- 重新精炼用户兴趣点描述
-- 调整关注的arXiv分类
-- 更新收藏列表总结
+4. 运行应用：
 
-### Q: 爬取不到最新论文？
-A: 检查：
-- arXiv API是否正常
-- 网络连接是否稳定
-- 时间窗口设置是否合理
+```bash
+./run.sh      # 或： python app.py
+```
 
-### Q: LLM调用失败？
-A: 确认：
-- API密钥是否正确
-- 基础URL是否可达
-- 模型名称是否支持
+5. 在浏览器打开：
 
-## 贡献指南
+http://localhost:5001
 
-欢迎提交Issue和Pull Request来改进项目！
+---
 
-## 许可证
+## 初次配置（使用步骤）
 
-MIT License
+1. 打开 `设置`：配置 LLM（Base URL、API Key、Model），并点击“测试连接”。
+2. 在“研究兴趣”中填写并保存您的研究方向（系统会调用 LLM 精炼兴趣点）。
+3. 在“关注分类”选择需要抓取的 arXiv 子分区。
+4. 切换到“论文库”或“推荐”开始使用：
+   - 推荐页：逐条查看 LLM 推荐、理由、中文翻译，并使用“喜欢/不喜欢/稍后再说”。
+   - 论文库：使用筛选（未评估/已评估/未读/喜欢/不喜欢/稍后）和分页管理全量论文。
 
-## 联系方式
+提示：系统会在后台对未评估论文进行评估（需在启动时配置 LLM），并在导航栏显示“未读”（已评估且被推荐但未被用户处理的数量）与“正在处理”（待评估数量）。
 
-如有问题或建议，请通过GitHub Issues联系。
+---
+
+## 常用 CLI / API（快速参考）
+
+- 启动爬取（管理界面或 API）：
+  - 管理界面按钮（论文库 -> 抓取最新论文）
+  - API：`POST /api/admin/crawl-now` 或 `POST /api/system/crawl-now`
+
+- 推荐与反馈：
+  - `GET /api/recommendation/next` — 获取下一篇推荐
+  - `POST /api/recommendation/feedback` — 提交用户反馈（favorite / maybe_later / dislike）
+
+- 管理论文：
+  - `GET /api/admin/papers?status=unread&page=1&per_page=50` — 管理界面分页（注意：`unread` = 已由LLM评估且被推荐，但用户未标记）
+  - `POST /api/admin/delete-disliked` — 删除所有被标记为不喜欢的论文
+
+- 状态：
+  - `GET /api/recommendation/status` — 返回 { pending, recommended_unseen, last_run, last_evaluated_count }
+
+更多接口详见代码中的路由（`app.py`）。
+
+---
+
+## 数据与行为说明（重要）
+
+- 数据库：SQLite（默认位于 `data/`）。主要表 `papers`，包含论文元信息、LLM 评估标记、推荐理由、中文翻译及用户标记。
+- 未读定义：`llm_evaluated = 1` 且 `is_recommended = 1`，并且未被用户标记为 `favorite` / `maybe_later` / `disliked`。
+- 去重策略：使用 `INSERT OR IGNORE` 和 `arxiv_id` 唯一索引避免重复爬取相同论文。
+
+---
+
+## 开发人员说明
+
+- 主要代码位置：
+  - 后端入口：`app.py`
+  - 爬虫：`services/arxiv_service.py`
+  - LLM 调用：`services/llm_service.py`
+  - 推荐逻辑：`services/recommendation_service.py`
+  - 数据库工具：`utils/database.py`
+  - 前端：`templates/index.html`、`static/js/*`、`static/css/*`
+
+- 本地调试提示：
+  - 更改 LLM 配置后若需要立即触发评估，可重启服务或手动通过管理接口触发评估逻辑。
+
+---
+
+## 贡献与支持
+
+欢迎通过 Issues 或 Pull Requests 贡献改进建议或补丁。
+
+---
+
+许可证：MIT
