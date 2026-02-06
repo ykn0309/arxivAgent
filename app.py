@@ -5,6 +5,7 @@ from services.recommendation_service import RecommendationService
 from utils.database import DatabaseManager
 import json
 import threading
+from datetime import datetime
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.config.from_object('config.Config')
@@ -395,6 +396,17 @@ def crawl_now():
         categories = data.get('categories')
         start_date = data.get('start_date')  # expected YYYY-MM-DD or None
         end_date = data.get('end_date')
+
+        # 后端校验：确保传入日期格式正确且 start_date <= end_date
+        if start_date and end_date:
+            try:
+                sd = datetime.strptime(start_date, '%Y-%m-%d')
+                ed = datetime.strptime(end_date, '%Y-%m-%d')
+            except Exception:
+                return jsonify({'success': False, 'error': '日期格式错误，期望 YYYY-MM-DD'}), 400
+
+            if sd > ed:
+                return jsonify({'success': False, 'error': '起始日期不能晚于结束日期'}), 400
 
         count = arxiv_service.crawl_recent_papers(force_categories=categories, start_date=start_date, end_date=end_date)
         

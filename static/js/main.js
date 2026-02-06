@@ -958,6 +958,16 @@ class ArxivAgentApp {
         const startDate = startInput && startInput.value ? startInput.value : null;
         const endDate = endInput && endInput.value ? endInput.value : null;
 
+        // 本地校验：如果同时填写了起始和结束日期，确保起始日期不晚于结束日期
+        if (startDate && endDate) {
+            const s = new Date(startDate);
+            const e = new Date(endDate);
+            if (s > e) {
+                utils.showNotification('起始日期不能晚于结束日期，请调整后重试。', 'error');
+                return;
+            }
+        }
+
         if (!confirm('确定要立即爬取新论文吗？这可能需要一些时间。')) return;
 
         try {
