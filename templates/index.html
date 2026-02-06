@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>arxivAgent - 智能论文推荐工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>arxivAgent</h1>
+                <span class="nav-subtitle">智能论文推荐助手</span>
+            </div>
+            <div class="nav-menu">
+                <button class="nav-btn active" data-tab="recommendation">推荐</button>
+                <button class="nav-btn" data-tab="list">列表</button>
+                <button class="nav-btn" data-tab="settings">设置</button>
+                <div class="nav-progress" id="nav-progress">
+                    <span class="nav-progress-text">待评估:</span>
+                    <span class="nav-progress-count" id="recommendation-remaining">—</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="main-content">
+        <!-- 推荐页面 -->
+        <section id="recommendation-tab" class="tab-content active">
+            <div class="recommendation-container">
+                <div class="paper-card" id="paper-card">
+                    <div class="card-loading" id="card-loading">
+                        <div class="loading-spinner"></div>
+                        <p>正在加载推荐...</p>
+                    </div>
+                    
+                    <div class="card-content" id="card-content" style="display: none;">
+                        <div class="paper-header">
+                            <h2 class="paper-title" id="paper-title"></h2>
+                            <h3 class="paper-chinese-title" id="paper-chinese-title"></h3>
+                            <div class="paper-categories" id="paper-categories"></div>
+                        </div>
+                        
+                        <div class="paper-authors" id="paper-authors"></div>
+                        
+                        <div class="paper-recommendation-reason">
+                            <h3>推荐理由</h3>
+                            <p id="paper-recommendation-reason"></p>
+                        </div>
+                        
+                        <div class="paper-abstract">
+                            <h3>Abstract</h3>
+                            <p id="paper-abstract"></p>
+                        </div>
+                        
+                        <div class="paper-chinese-abstract">
+                            <h3>中文摘要</h3>
+                            <p id="paper-chinese-abstract"></p>
+                        </div>
+                        
+                        <div class="paper-actions">
+                            <button class="action-btn dislike-btn" data-action="dislike">
+                                <span class="btn-icon">👎</span>
+                                不喜欢
+                            </button>
+                            <button class="action-btn maybe-btn" data-action="maybe_later">
+                                <span class="btn-icon">⏰</span>
+                                稍后再说
+                            </button>
+                            <button class="action-btn like-btn" data-action="favorite">
+                                <span class="btn-icon">👍</span>
+                                喜欢
+                            </button>
+                        </div>
+                        
+                        <div class="paper-links">
+                            <a href="#" class="paper-link" id="paper-arxiv-link" target="_blank">查看原文</a>
+                            <a href="#" class="paper-link" id="paper-pdf-link" target="_blank">下载PDF</a>
+                        </div>
+                    </div>
+                    
+                    <div class="card-empty" id="card-empty" style="display: none;">
+                        <div class="empty-icon">📚</div>
+                        <h3>暂无推荐论文</h3>
+                        <p>可能是以下原因：</p>
+                        <ul>
+                            <li>还没有配置好基本设置</li>
+                            <li>需要等待系统爬取更多论文</li>
+                            <li>所有论文都已评估完毕</li>
+                        </ul>
+                        <button class="primary-btn" id="refresh-recommendation">刷新试试</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 列表页面 -->
+        <section id="list-tab" class="tab-content">
+            <div class="list-container">
+                <div class="list-tabs">
+                    <button class="list-tab-btn active" data-list="favorites">收藏列表</button>
+                    <button class="list-tab-btn" data-list="maybe-later">稍后再说</button>
+                </div>
+                
+                <!-- 收藏列表 -->
+                <div id="favorites-list" class="list-content active">
+                    <div class="list-header">
+                        <h2>收藏的论文</h2>
+                        <div class="pagination-controls" id="favorites-pagination"></div>
+                    </div>
+                    <div class="papers-list" id="favorites-papers-list"></div>
+                </div>
+                
+                <!-- 稍后再说列表 -->
+                <div id="maybe-later-list" class="list-content">
+                    <div class="list-header">
+                        <h2>稍后再说的论文</h2>
+                        <div class="pagination-controls" id="maybe-later-pagination"></div>
+                    </div>
+                    <div class="papers-list" id="maybe-later-papers-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 设置页面 -->
+        <section id="settings-tab" class="tab-content">
+            <div class="settings-container">
+                <div class="settings-header">
+                    <h1>系统设置</h1>
+                    <p>配置您的个性化推荐体验</p>
+                </div>
+                
+                <div class="settings-sections">
+                    <!-- 配置状态概览 -->
+                    <div class="settings-section">
+                        <h2>📋 配置状态</h2>
+                        <div class="config-status" id="config-status">
+                            <div class="status-item">
+                                <span class="status-label">LLM配置:</span>
+                                <span class="status-value" id="llm-status">未配置</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">研究兴趣:</span>
+                                <span class="status-value" id="interests-status">未配置</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="status-label">关注分类:</span>
+                                <span class="status-value" id="categories-status">未配置</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- LLM配置 -->
+                    <div class="settings-section">
+                        <h2>🤖 LLM配置</h2>
+                        <form id="llm-config-form" class="config-form">
+                            <div class="form-group">
+                                <label for="llm-base-url">API基础URL:</label>
+                                <input type="url" id="llm-base-url" placeholder="https://api.openai.com/v1" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="llm-api-key">API密钥:</label>
+                                <input type="password" id="llm-api-key" placeholder="sk-..." required>
+                            </div>
+                            <div class="form-group">
+                                <label for="llm-model">模型:</label>
+                                <input type="text" id="llm-model" placeholder="例如: gpt-3.5-turbo" required>
+                                <small class="form-help">请输入模型名称，如 gpt-3.5-turbo, gpt-4, claude-3-haiku 等</small>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">保存配置</button>
+                                <button type="button" id="test-llm-btn" class="secondary-btn">测试连接</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 研究兴趣配置 -->
+                    <div class="settings-section">
+                        <h2>🎯 研究兴趣</h2>
+                        <form id="interests-form" class="config-form">
+                            <div class="form-group">
+                                <label for="user-interests">请描述您的研究方向或感兴趣的技术领域:</label>
+                                <textarea id="user-interests" rows="4" placeholder="例如：我主要从事机器学习和自然语言处理方面的研究，特别关注大语言模型、对话系统和文本生成技术..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>精炼后的兴趣点:</label>
+                                <div class="refined-interests" id="refined-interests">
+                                    <p class="placeholder-text">保存后将显示精炼结果</p>
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">保存并精炼</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 分类配置 -->
+                    <div class="settings-section">
+                        <h2>📂 关注分类</h2>
+                        <form id="categories-form" class="config-form">
+                            <div class="form-group">
+                                <label>请选择您关注的arXiv计算机科学子分区:</label>
+                                <div class="categories-list" id="categories-list">
+                                    <!-- 分类选项将通过JavaScript动态生成 -->
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="primary-btn">保存分类</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 收藏总结 -->
+                    <div class="settings-section">
+                        <h2>📊 收藏总结</h2>
+                        <div class="config-form">
+                            <div class="form-group">
+                                <label>基于收藏论文总结出的研究兴趣:</label>
+                                <textarea id="favorite-summary" rows="4" placeholder="系统会根据您的收藏自动总结..."></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" id="update-summary-btn" class="primary-btn">更新总结</button>
+                                <button type="button" id="save-summary-btn" class="secondary-btn">手动保存</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 系统维护 -->
+                    <div class="settings-section">
+                        <h2>🔧 系统维护</h2>
+                        <div class="maintenance-actions">
+                            <button type="button" id="crawl-now-btn" class="warning-btn">
+                                🔄 立即爬取新论文
+                            </button>
+                            <button type="button" id="clean-cache-btn" class="danger-btn">
+                                🗑️ 清理30天前的缓存
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 论文详情模态框 -->
+    <div class="modal" id="paper-detail-modal">
+        <div class="modal-content paper-detail-modal-content">
+            <button class="modal-close" id="paper-detail-close">&times;</button>
+            
+            <div class="paper-detail-header">
+                <h2 class="paper-detail-title" id="paper-detail-title"></h2>
+                <h3 class="paper-detail-chinese-title" id="paper-detail-chinese-title"></h3>
+                <div class="paper-detail-categories" id="paper-detail-categories"></div>
+            </div>
+            
+            <div class="paper-detail-authors" id="paper-detail-authors"></div>
+            
+            <div class="paper-detail-recommendation-reason">
+                <h3>推荐理由</h3>
+                <p id="paper-detail-recommendation-reason"></p>
+            </div>
+            
+            <div class="paper-detail-abstract">
+                <h3>Abstract</h3>
+                <p id="paper-detail-abstract"></p>
+            </div>
+            
+            <div class="paper-detail-chinese-abstract">
+                <h3>中文摘要</h3>
+                <p id="paper-detail-chinese-abstract"></p>
+            </div>
+            
+            <div class="paper-detail-links">
+                <a href="#" class="paper-link" id="paper-detail-arxiv-link" target="_blank">查看原文</a>
+                <a href="#" class="paper-link" id="paper-detail-pdf-link" target="_blank">下载PDF</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户笔记模态框 已移除 -->
+
+    <!-- 加载遮罩 -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p id="loading-message">处理中...</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

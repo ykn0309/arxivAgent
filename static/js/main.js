@@ -1,0 +1,961 @@
+// 主要应用逻辑
+class ArxivAgentApp {
+    constructor() {
+        this.currentTab = 'recommendation';
+        this.currentListTab = 'favorites';
+        this.currentPaper = null;
+        this.init();
+    }
+
+    init() {
+        this.bindEvents();
+        this.loadInitialData();
+    }
+
+    bindEvents() {
+        // 导航标签切换
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tab = e.target.dataset.tab;
+                this.switchTab(tab);
+            });
+        });
+
+        // 列表标签切换
+        document.querySelectorAll('.list-tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const list = e.target.dataset.list;
+                this.switchListTab(list);
+            });
+        });
+
+        // 推荐操作按钮
+        document.querySelectorAll('.action-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = e.target.closest('.action-btn').dataset.action;
+                this.handlePaperAction(action);
+            });
+        });
+
+        // 表单提交事件
+        document.getElementById('llm-config-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveLLMConfig();
+        });
+
+        document.getElementById('interests-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveUserInterests();
+        });
+
+        document.getElementById('categories-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveCategories();
+        });
+
+        // 测试按钮
+        document.getElementById('test-llm-btn').addEventListener('click', () => {
+            this.testLLM();
+        });
+
+        // 更新总结按钮
+        document.getElementById('update-summary-btn').addEventListener('click', () => {
+            this.updateFavoriteSummary();
+        });
+
+        document.getElementById('save-summary-btn').addEventListener('click', () => {
+            this.saveFavoriteSummary();
+        });
+
+        // 维护按钮
+        document.getElementById('crawl-now-btn').addEventListener('click', () => {
+            this.crawlNow();
+        });
+
+        document.getElementById('clean-cache-btn').addEventListener('click', () => {
+            this.cleanCache();
+        });
+
+        // 刷新推荐按钮
+        document.getElementById('refresh-recommendation').addEventListener('click', () => {
+            this.loadNextRecommendation();
+        });
+
+        // note-modal 已移除，相关事件处理不再需要
+
+        // 点击模态框外部关闭
+        // 点击模态框外部关闭（若有其他模态框，可继续保留此行为）
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+
+        // 论文详情模态框关闭按钮
+        const paperDetailCloseBtn = document.getElementById('paper-detail-close');
+        if (paperDetailCloseBtn) {
+            paperDetailCloseBtn.addEventListener('click', () => {
+                this.closePaperDetail();
+            });
+        }
+    }
+
+    async loadInitialData() {
+        await this.loadConfigStatus();
+        await this.loadSettingsData();
+        await this.loadRecommendationStatus();
+        this.loadNextRecommendation();
+    }
+
+    async loadRecommendationStatus() {
+        try {
+            const resp = await api.getRecommendationStatus();
+            if (resp.success && resp.data) {
+                const pending = resp.data.pending;
+                const el = document.getElementById('recommendation-remaining');
+                if (el) el.textContent = pending;
+            }
+        } catch (e) {
+            console.error('加载推荐进度失败:', e);
+        }
+    }
+
+    // 标签页切换
+    switchTab(tabName) {
+        // 更新导航按钮状态
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+
+        // 显示对应内容
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.toggle('active', content.id === `${tabName}-tab`);
+        });
+
+        this.currentTab = tabName;
+
+        // 加载相应数据
+        if (tabName === 'list') {
+            this.loadListData();
+        } else if (tabName === 'settings') {
+            this.loadSettingsData();
+        }
+    }
+
+    switchListTab(listName) {
+        // 更新列表标签状态
+        document.querySelectorAll('.list-tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.list === listName);
+        });
+
+        // 显示对应列表
+        document.querySelectorAll('.list-content').forEach(content => {
+            content.classList.toggle('active', content.id === `${listName}-list`);
+        });
+
+        this.currentListTab = listName;
+        this.loadListData();
+    }
+
+    // 配置状态管理
+    async loadConfigStatus() {
+        try {
+            const response = await api.getConfigStatus();
+            if (response.success) {
+                const status = response.data;
+                
+                document.getElementById('llm-status').textContent = 
+                    status.llm_configured ? '✅ 已配置' : '❌ 未配置';
+                document.getElementById('llm-status').className = 
+                    `status-value ${status.llm_configured ? 'configured' : 'not-configured'}`;
+                
+                document.getElementById('interests-status').textContent = 
+                    status.interests_configured ? '✅ 已配置' : '❌ 未配置';
+                document.getElementById('interests-status').className = 
+                    `status-value ${status.interests_configured ? 'configured' : 'not-configured'}`;
+                
+                document.getElementById('categories-status').textContent = 
+                    status.categories_configured ? '✅ 已配置' : '❌ 未配置';
+                document.getElementById('categories-status').className = 
+                    `status-value ${status.categories_configured ? 'configured' : 'not-configured'}`;
+            }
+        } catch (error) {
+            console.error('加载配置状态失败:', error);
+        }
+    }
+
+    // 设置页面数据加载
+    async loadSettingsData() {
+        await Promise.all([
+            this.loadLLMConfig(),
+            this.loadUserInterests(),
+            this.loadCategories(),
+            this.loadFavoriteSummary()
+        ]);
+    }
+
+    async loadLLMConfig() {
+        try {
+            const response = await api.getLLMConfig();
+            if (response.success) {
+                const config = response.data;
+                document.getElementById('llm-base-url').value = config.base_url || '';
+                document.getElementById('llm-model').value = config.model || '';
+            }
+        } catch (error) {
+            console.error('加载LLM配置失败:', error);
+        }
+    }
+
+    async loadUserInterests() {
+        try {
+            const response = await api.getUserInterests();
+            if (response.success) {
+                const data = response.data;
+                if (data.interests) {
+                    document.getElementById('refined-interests').innerHTML = 
+                        `<p>${data.interests}</p>`;
+                }
+            }
+        } catch (error) {
+            console.error('加载用户兴趣失败:', error);
+        }
+    }
+
+    async loadCategories() {
+        try {
+            const response = await api.getCategories();
+            if (response.success) {
+                const data = response.data;
+                this.renderCategoryOptions(data.all_categories, data.current_categories);
+            }
+        } catch (error) {
+            console.error('加载分类失败:', error);
+        }
+    }
+
+    async loadFavoriteSummary() {
+        try {
+            const response = await api.getFavoriteSummary();
+            if (response.success) {
+                const data = response.data;
+                document.getElementById('favorite-summary').value = data.summary || '';
+            }
+        } catch (error) {
+            console.error('加载收藏总结失败:', error);
+        }
+    }
+
+    renderCategoryOptions(allCategories, currentCategories) {
+        const container = document.getElementById('categories-list');
+        container.innerHTML = '';
+
+        // 创建分类代码到中文名称的映射（使用更简洁的名称）
+        const categoryNames = {
+            'cs.AI': '人工智能',
+            'cs.AR': '硬件架构',
+            'cs.CC': '计算复杂性',
+            'cs.CE': '计算工程',
+            'cs.CG': '计算几何',
+            'cs.CL': '自然语言处理',
+            'cs.CR': '密码安全',
+            'cs.CV': '计算机视觉',
+            'cs.CY': '计算机社会',
+            'cs.DB': '数据库',
+            'cs.DC': '分布式计算',
+            'cs.DL': '数字图书馆',
+            'cs.DM': '离散数学',
+            'cs.DS': '数据结构',
+            'cs.ET': '新兴技术',
+            'cs.FL': '形式语言',
+            'cs.GL': '综合通论',
+            'cs.GR': '计算机图形',
+            'cs.GT': '博弈论',
+            'cs.HC': '人机交互',
+            'cs.IR': '信息检索',
+            'cs.IT': '信息论',
+            'cs.LG': '机器学习',
+            'cs.LO': '程序逻辑',
+            'cs.MA': '多智能体',
+            'cs.MM': '多媒体',
+            'cs.MS': '数学软件',
+            'cs.NA': '数值分析',
+            'cs.NE': '神经计算',
+            'cs.NI': '网络架构',
+            'cs.OH': '其他CS',
+            'cs.OS': '操作系统',
+            'cs.PF': '性能分析',
+            'cs.PL': '编程语言',
+            'cs.RO': '机器人学',
+            'cs.SC': '符号计算',
+            'cs.SD': '音频计算',
+            'cs.SE': '软件工程',
+            'cs.SI': '社会网络',
+            'cs.SY': '系统控制'
+        };
+
+        // 按字母顺序排序分类
+        const sortedCategories = Object.entries(allCategories).sort((a, b) => a[0].localeCompare(b[0]));
+
+        sortedCategories.forEach(([code, description]) => {
+            const isSelected = currentCategories.includes(code);
+            const categoryName = categoryNames[code] || code;
+            
+            const label = document.createElement('label');
+            label.className = `category-option ${isSelected ? 'selected' : ''}`;
+            label.style.cursor = 'pointer';
+            label.title = description;
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = isSelected;
+            checkbox.style.cursor = 'pointer';
+            checkbox.style.marginRight = '8px';
+            
+            const span = document.createElement('span');
+            span.textContent = categoryName;
+            span.style.flex = '1';
+            span.style.overflow = 'hidden';
+            span.style.textOverflow = 'ellipsis';
+            span.style.whiteSpace = 'nowrap';
+            
+            label.appendChild(checkbox);
+            label.appendChild(span);
+            
+            label.addEventListener('change', () => {
+                label.classList.toggle('selected', checkbox.checked);
+            });
+            
+            container.appendChild(label);
+        });
+    }
+
+    // 推荐功能
+    async loadNextRecommendation() {
+        const loadingEl = document.getElementById('card-loading');
+        const contentEl = document.getElementById('card-content');
+        const emptyEl = document.getElementById('card-empty');
+
+        loadingEl.style.display = 'flex';
+        contentEl.style.display = 'none';
+        emptyEl.style.display = 'none';
+
+        try {
+            const response = await api.getNextRecommendation();
+            if (response.success) {
+                if (response.data) {
+                    this.currentPaper = response.data;
+                    this.displayPaperCard(response.data);
+                    loadingEl.style.display = 'none';
+                    contentEl.style.display = 'flex';
+                } else {
+                    // 没有更多推荐
+                    loadingEl.style.display = 'none';
+                    emptyEl.style.display = 'flex';
+                }
+            }
+        } catch (error) {
+            console.error('加载推荐失败:', error);
+            utils.showNotification('加载推荐失败: ' + error.message, 'error');
+            loadingEl.style.display = 'none';
+            emptyEl.style.display = 'flex';
+        }
+    }
+
+    displayPaperCard(paper) {
+        document.getElementById('paper-title').textContent = paper.title;
+        document.getElementById('paper-abstract').textContent = paper.abstract;
+        document.getElementById('paper-arxiv-link').href = paper.arxiv_url;
+        document.getElementById('paper-pdf-link').href = paper.pdf_url;
+
+        // 显示推荐理由
+        const reasonEl = document.getElementById('paper-recommendation-reason');
+        if (paper.recommendation_reason) {
+            reasonEl.textContent = paper.recommendation_reason;
+            reasonEl.parentElement.style.display = 'block';
+        } else {
+            reasonEl.parentElement.style.display = 'none';
+        }
+
+        // 显示中文翻译
+        const chineseTitleEl = document.getElementById('paper-chinese-title');
+        const chineseAbstractEl = document.getElementById('paper-chinese-abstract');
+        
+        if (paper.chinese_title) {
+            chineseTitleEl.textContent = paper.chinese_title;
+            chineseTitleEl.style.display = 'block';
+        } else {
+            chineseTitleEl.style.display = 'none';
+        }
+        
+        if (paper.chinese_abstract) {
+            chineseAbstractEl.textContent = paper.chinese_abstract;
+            chineseAbstractEl.style.display = 'block';
+        } else {
+            chineseAbstractEl.style.display = 'none';
+        }
+
+        // 显示作者
+        let authors = [];
+        if (paper.authors) {
+            try {
+                authors = typeof paper.authors === 'string' ? JSON.parse(paper.authors) : paper.authors;
+            } catch (e) {
+                console.error('解析authors出错:', e);
+            }
+        }
+        const authorsHtml = authors.length > 0 ? 
+            `作者: ${authors.join(', ')}` : '作者信息不可用';
+        document.getElementById('paper-authors').textContent = authorsHtml;
+
+        // 显示分类标签
+        const categoriesContainer = document.getElementById('paper-categories');
+        categoriesContainer.innerHTML = '';
+        let categories = [];
+        if (paper.categories) {
+            try {
+                categories = typeof paper.categories === 'string' ? JSON.parse(paper.categories) : paper.categories;
+            } catch (e) {
+                console.error('解析categories出错:', e);
+            }
+        }
+        if (categories.length > 0) {
+            categories.forEach(cat => {
+                const tag = document.createElement('span');
+                tag.className = 'category-tag';
+                tag.textContent = cat;
+                categoriesContainer.appendChild(tag);
+            });
+        }
+    }
+
+    async handlePaperAction(action) {
+        if (!this.currentPaper) return;
+
+        // 不再弹出笔记模态框，直接发送反馈（user_note 为空）
+        if (action === 'favorite' || action === 'maybe_later') {
+            await this.sendPaperFeedback(this.currentPaper.id, action, '');
+        } else {
+            await this.sendPaperFeedback(this.currentPaper.id, action);
+        }
+    }
+
+    async sendPaperFeedback(paperId, action, note = '') {
+        try {
+            utils.showLoading('处理反馈中...');
+            await api.sendFeedback({
+                paper_id: paperId,
+                action: action,
+                user_note: note
+            });
+            
+            utils.hideLoading();
+            utils.showNotification('反馈已处理', 'success');
+            
+            // 加载下一个推荐
+            this.loadNextRecommendation();
+            // 刷新剩余计数
+            this.loadRecommendationStatus();
+            
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('处理反馈失败: ' + error.message, 'error');
+        }
+    }
+
+    saveNote() {
+        // note-modal 已移除，保存笔记功能被禁用
+        return;
+    }
+
+    // 列表管理
+    async loadListData() {
+        if (this.currentListTab === 'favorites') {
+            await this.loadFavorites();
+        } else {
+            await this.loadMaybeLater();
+        }
+    }
+
+    async loadFavorites(page = 1) {
+        try {
+            console.log('加载收藏列表，页码:', page);
+            const response = await api.getFavorites(page, 10);
+            console.log('收藏列表API响应:', response);
+            if (response.success) {
+                this.renderPaperList('favorites-papers-list', response.data.papers);
+                this.renderPagination('favorites-pagination', response.data.pagination);
+            } else {
+                console.error('API返回失败:', response.error);
+            }
+        } catch (error) {
+            console.error('加载收藏列表失败:', error);
+            utils.showNotification('加载收藏列表失败: ' + error.message, 'error');
+        }
+    }
+
+    async loadMaybeLater(page = 1) {
+        try {
+            console.log('加载稍后再说列表，页码:', page);
+            const response = await api.getMaybeLater(page, 10);
+            console.log('稍后再说列表API响应:', response);
+            if (response.success) {
+                this.renderPaperList('maybe-later-papers-list', response.data.papers, true);
+                this.renderPagination('maybe-later-pagination', response.data.pagination);
+            } else {
+                console.error('API返回失败:', response.error);
+            }
+        } catch (error) {
+            console.error('加载稍后再说列表失败:', error);
+            utils.showNotification('加载稍后再说列表失败: ' + error.message, 'error');
+        }
+    }
+
+    renderPaperList(containerId, papers, isMaybeLater = false) {
+        console.log(`渲染论文列表到 ${containerId}，论文数量:`, papers.length);
+        console.log('论文数据:', papers);
+        
+        const container = document.getElementById(containerId);
+        if (!container) {
+            console.error('找不到容器元素:', containerId);
+            return;
+        }
+        
+        container.innerHTML = '';
+
+        if (papers.length === 0) {
+            container.innerHTML = '<p class="empty-list">暂无数据</p>';
+            return;
+        }
+
+        papers.forEach(paper => {
+            const paperElement = document.createElement('div');
+            paperElement.className = 'paper-item';
+            
+            // 使用正确的 id 字段：
+            // - 收藏列表包含 `favorite_id` 和 `paper_id`
+            // - 稍后再说列表包含 `maybe_later_id` 和 `paper_id`
+            const actionsHtml = isMaybeLater ? 
+                `<button class="item-action-btn move-btn" data-paper-id="${paper.paper_id}">移到收藏</button>
+                 <button class="item-action-btn delete-btn" data-maybe-id="${paper.maybe_later_id}">删除</button>` :
+                `<button class="item-action-btn delete-btn" data-favorite-id="${paper.favorite_id}">删除</button>`;
+
+            // 解析categories
+            let categories = [];
+            if (paper.categories) {
+                try {
+                    categories = typeof paper.categories === 'string' ? JSON.parse(paper.categories) : paper.categories;
+                } catch (e) {
+                    console.error('解析categories出错:', e);
+                }
+            }
+
+            paperElement.innerHTML = `
+                <div class="paper-item-header">
+                    <h3 class="paper-item-title">${paper.title}</h3>
+                    <div class="paper-item-actions">
+                        ${actionsHtml}
+                    </div>
+                </div>
+                <div class="paper-item-meta">
+                    <span class="meta-item">📅 ${utils.formatDate(paper.published_date)}</span>
+                    <span class="meta-item">🏷️ ${categories.length > 0 ? categories.join(', ') : ''}</span>
+                </div>
+                <div class="paper-item-abstract">${utils.truncateText(paper.abstract, 300)}</div>
+            `;
+
+            // 使论文项可点击查看详情
+            const titleElement = paperElement.querySelector('.paper-item-title');
+            titleElement.style.cursor = 'pointer';
+            titleElement.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showPaperDetail(paper);
+            });
+
+            // 绑定操作按钮事件
+            paperElement.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    // 优先读取专用 dataset 字段
+                    const favoriteId = e.target.dataset.favoriteId;
+                    const maybeId = e.target.dataset.maybeId;
+                    if (maybeId) {
+                        this.deleteMaybeLater(maybeId);
+                    } else if (favoriteId) {
+                        this.deleteFavorite(favoriteId);
+                    } else {
+                        console.warn('未找到有效的删除 ID');
+                    }
+                });
+            });
+
+            if (isMaybeLater) {
+                paperElement.querySelectorAll('.move-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const paperId = e.target.dataset.paperId;
+                        this.moveToFavorite(paperId);
+                    });
+                });
+            }
+
+            container.appendChild(paperElement);
+        });
+    }
+
+    renderPagination(containerId, pagination) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = `
+            <button class="pagination-btn" id="prev-btn" 
+                    ${pagination.page <= 1 ? 'disabled' : ''}>上一页</button>
+            <span class="page-info">第 ${pagination.page} 页，共 ${pagination.pages} 页</span>
+            <button class="pagination-btn" id="next-btn" 
+                    ${pagination.page >= pagination.pages ? 'disabled' : ''}>下一页</button>
+        `;
+
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            const newPage = pagination.page - 1;
+            if (this.currentListTab === 'favorites') {
+                this.loadFavorites(newPage);
+            } else {
+                this.loadMaybeLater(newPage);
+            }
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            const newPage = pagination.page + 1;
+            if (this.currentListTab === 'favorites') {
+                this.loadFavorites(newPage);
+            } else {
+                this.loadMaybeLater(newPage);
+            }
+        });
+    }
+
+    async moveToFavorite(paperId) {
+        try {
+            utils.showLoading('移动中...');
+            await api.moveToFavorite(paperId);
+            utils.hideLoading();
+            utils.showNotification('已移动到收藏', 'success');
+            this.loadListData();
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('移动失败: ' + error.message, 'error');
+        }
+    }
+
+    async deleteFavorite(favoriteId) {
+        if (!confirm('确定要删除这篇收藏吗？')) return;
+        
+        try {
+            utils.showLoading('删除中...');
+            await api.deleteFavorite(favoriteId);
+            utils.hideLoading();
+            utils.showNotification('删除成功', 'success');
+            this.loadListData();
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('删除失败: ' + error.message, 'error');
+        }
+    }
+
+    async deleteMaybeLater(maybeLaterId) {
+        if (!confirm('确定要删除这条记录吗？')) return;
+        
+        try {
+            utils.showLoading('删除中...');
+            await api.deleteMaybeLater(maybeLaterId);
+            utils.hideLoading();
+            utils.showNotification('删除成功', 'success');
+            this.loadListData();
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('删除失败: ' + error.message, 'error');
+        }
+    }
+
+    // 论文详情显示
+    showPaperDetail(paper) {
+        const modal = document.getElementById('paper-detail-modal');
+        
+        // 填充论文信息
+        document.getElementById('paper-detail-title').textContent = paper.title;
+        document.getElementById('paper-detail-abstract').textContent = paper.abstract;
+        document.getElementById('paper-detail-arxiv-link').href = paper.arxiv_url;
+        document.getElementById('paper-detail-pdf-link').href = paper.pdf_url;
+
+        // 显示作者
+        const authorsEl = document.getElementById('paper-detail-authors');
+        if (paper.authors) {
+            try {
+                const authors = typeof paper.authors === 'string' ? JSON.parse(paper.authors) : paper.authors;
+                authorsEl.textContent = '作者: ' + authors.join(', ');
+            } catch (e) {
+                authorsEl.textContent = '作者: ' + paper.authors;
+            }
+        }
+
+        // 显示分类
+        const categoriesEl = document.getElementById('paper-detail-categories');
+        categoriesEl.innerHTML = '';
+        if (paper.categories) {
+            try {
+                const categories = typeof paper.categories === 'string' ? JSON.parse(paper.categories) : paper.categories;
+                categories.forEach(cat => {
+                    const tag = document.createElement('span');
+                    tag.className = 'category-tag';
+                    tag.textContent = cat;
+                    categoriesEl.appendChild(tag);
+                });
+            } catch (e) {
+                console.error('解析分类出错:', e);
+            }
+        }
+
+        // 显示推荐理由
+        const reasonEl = document.getElementById('paper-detail-recommendation-reason');
+        const reasonContainer = reasonEl.parentElement;
+        if (paper.recommendation_reason) {
+            reasonEl.textContent = paper.recommendation_reason;
+            reasonContainer.style.display = 'block';
+        } else {
+            reasonContainer.style.display = 'none';
+        }
+
+        // 显示中文翻译（如果存在）
+        const chineseTitleEl = document.getElementById('paper-detail-chinese-title');
+        if (paper.chinese_title) {
+            chineseTitleEl.textContent = paper.chinese_title;
+            chineseTitleEl.style.display = 'block';
+        } else {
+            chineseTitleEl.style.display = 'none';
+        }
+
+        const chineseAbstractEl = document.getElementById('paper-detail-chinese-abstract');
+        if (paper.chinese_abstract) {
+            chineseAbstractEl.textContent = paper.chinese_abstract;
+            chineseAbstractEl.parentElement.style.display = 'block';
+        } else {
+            chineseAbstractEl.parentElement.style.display = 'none';
+        }
+
+        // 打开模态框
+        modal.classList.add('active');
+    }
+
+    closePaperDetail() {
+        const modal = document.getElementById('paper-detail-modal');
+        modal.classList.remove('active');
+    }
+
+    // 设置保存功能
+    async saveLLMConfig() {
+        const baseUrl = document.getElementById('llm-base-url').value.trim();
+        const apiKey = document.getElementById('llm-api-key').value.trim();
+        const model = document.getElementById('llm-model').value.trim();
+
+        if (!baseUrl || !apiKey || !model) {
+            utils.showNotification('请填写所有必填字段', 'warning');
+            return;
+        }
+
+        try {
+            utils.showLoading('保存配置中...');
+            await api.updateLLMConfig({ base_url: baseUrl, api_key: apiKey, model });
+            utils.hideLoading();
+            utils.showNotification('LLM配置已保存', 'success');
+            this.loadConfigStatus();
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    async testLLM() {
+        try {
+            utils.showLoading('测试连接中...');
+            const response = await api.testLLMConnection();
+            utils.hideLoading();
+            
+            if (response.success) {
+                utils.showNotification(response.message, response.success ? 'success' : 'error');
+            }
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('测试失败: ' + error.message, 'error');
+        }
+    }
+
+    async saveUserInterests() {
+        const interests = document.getElementById('user-interests').value.trim();
+        
+        if (!interests) {
+            utils.showNotification('请输入研究兴趣', 'warning');
+            return;
+        }
+
+        try {
+            utils.showLoading('处理中...');
+            const response = await api.updateUserInterests(interests);
+            utils.hideLoading();
+            
+            if (response.success) {
+                document.getElementById('refined-interests').innerHTML = 
+                    `<p>${response.data.refined_interests}</p>`;
+                utils.showNotification('兴趣点已保存并精炼', 'success');
+                this.loadConfigStatus();
+            }
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    async saveCategories() {
+        const selectedCategories = [];
+        const categoryNames = {
+            '人工智能': 'cs.AI',
+            '硬件架构': 'cs.AR',
+            '计算复杂性': 'cs.CC',
+            '计算工程': 'cs.CE',
+            '计算几何': 'cs.CG',
+            '自然语言处理': 'cs.CL',
+            '密码安全': 'cs.CR',
+            '计算机视觉': 'cs.CV',
+            '计算机社会': 'cs.CY',
+            '数据库': 'cs.DB',
+            '分布式计算': 'cs.DC',
+            '数字图书馆': 'cs.DL',
+            '离散数学': 'cs.DM',
+            '数据结构': 'cs.DS',
+            '新兴技术': 'cs.ET',
+            '形式语言': 'cs.FL',
+            '综合通论': 'cs.GL',
+            '计算机图形': 'cs.GR',
+            '博弈论': 'cs.GT',
+            '人机交互': 'cs.HC',
+            '信息检索': 'cs.IR',
+            '信息论': 'cs.IT',
+            '机器学习': 'cs.LG',
+            '程序逻辑': 'cs.LO',
+            '多智能体': 'cs.MA',
+            '多媒体': 'cs.MM',
+            '数学软件': 'cs.MS',
+            '数值分析': 'cs.NA',
+            '神经计算': 'cs.NE',
+            '网络架构': 'cs.NI',
+            '其他CS': 'cs.OH',
+            '操作系统': 'cs.OS',
+            '性能分析': 'cs.PF',
+            '编程语言': 'cs.PL',
+            '机器人学': 'cs.RO',
+            '符号计算': 'cs.SC',
+            '音频计算': 'cs.SD',
+            '软件工程': 'cs.SE',
+            '社会网络': 'cs.SI',
+            '系统控制': 'cs.SY'
+        };
+        
+        document.querySelectorAll('.category-option.selected input[type="checkbox"]:checked').forEach(checkbox => {
+            const label = checkbox.closest('.category-option');
+            const categoryName = label.querySelector('span').textContent.trim();
+            const categoryCode = categoryNames[categoryName];
+            if (categoryCode) {
+                selectedCategories.push(categoryCode);
+            }
+        });
+
+        if (selectedCategories.length === 0) {
+            utils.showNotification('请至少选择一个分类', 'warning');
+            return;
+        }
+
+        try {
+            utils.showLoading('保存中...');
+            await api.updateCategories(selectedCategories);
+            utils.hideLoading();
+            utils.showNotification('分类配置已保存', 'success');
+            this.loadConfigStatus();
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    async updateFavoriteSummary() {
+        try {
+            utils.showLoading('更新总结中...');
+            const response = await api.updateFavoriteSummaryAuto();
+            utils.hideLoading();
+            
+            if (response.success) {
+                document.getElementById('favorite-summary').value = response.data.summary;
+                utils.showNotification('收藏总结已更新', 'success');
+            }
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('更新失败: ' + error.message, 'error');
+        }
+    }
+
+    async saveFavoriteSummary() {
+        const summary = document.getElementById('favorite-summary').value.trim();
+        
+        if (!summary) {
+            utils.showNotification('请输入总结内容', 'warning');
+            return;
+        }
+
+        try {
+            utils.showLoading('保存中...');
+            await api.updateFavoriteSummary(summary);
+            utils.hideLoading();
+            utils.showNotification('收藏总结已保存', 'success');
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('保存失败: ' + error.message, 'error');
+        }
+    }
+
+    // 系统维护功能
+    async crawlNow() {
+        if (!confirm('确定要立即爬取新论文吗？这可能需要一些时间。')) return;
+        
+        try {
+            utils.showLoading('爬取中...');
+            const response = await api.crawlNow();
+            utils.hideLoading();
+            
+            if (response.success) {
+                utils.showNotification(response.message, 'success');
+                this.loadConfigStatus();
+            }
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('爬取失败: ' + error.message, 'error');
+        }
+    }
+
+    async cleanCache() {
+        if (!confirm('确定要清理30天前的缓存吗？收藏和稍后再说的论文不会被删除。')) return;
+        
+        try {
+            utils.showLoading('清理中...');
+            const response = await api.cleanCache();
+            utils.hideLoading();
+            
+            if (response.success) {
+                utils.showNotification(response.message, 'success');
+            }
+        } catch (error) {
+            utils.hideLoading();
+            utils.showNotification('清理失败: ' + error.message, 'error');
+        }
+    }
+}
+
+// 初始化应用
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new ArxivAgentApp();
+});
