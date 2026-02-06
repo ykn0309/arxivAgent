@@ -953,13 +953,25 @@ class ArxivAgentApp {
 
     // 系统维护功能
     async crawlNow() {
+        const startInput = document.getElementById('crawl-start-date');
+        const endInput = document.getElementById('crawl-end-date');
+        const startDate = startInput && startInput.value ? startInput.value : null;
+        const endDate = endInput && endInput.value ? endInput.value : null;
+
         if (!confirm('确定要立即爬取新论文吗？这可能需要一些时间。')) return;
-        
+
         try {
             utils.showLoading('爬取中...');
-            const response = await api.crawlNow();
+            const body = {};
+            if (startDate) body.start_date = startDate;
+            if (endDate) body.end_date = endDate;
+
+            const response = await api.request('/system/crawl-now', {
+                method: 'POST',
+                body: body
+            });
             utils.hideLoading();
-            
+
             if (response.success) {
                 utils.showNotification(response.message, 'success');
                 this.loadConfigStatus();

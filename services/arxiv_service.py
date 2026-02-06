@@ -91,8 +91,11 @@ class ArxivService:
         
         return papers
     
-    def crawl_recent_papers(self, force_categories: Optional[List[str]] = None) -> int:
-        """爬取近期论文"""
+    def crawl_recent_papers(self, force_categories: Optional[List[str]] = None, start_date: Optional[str] = None, end_date: Optional[str] = None) -> int:
+        """爬取论文，支持可选的日期范围（YYYY-MM-DD）。
+
+        如果提供 `start_date`/`end_date`，将使用该范围，否则使用基于 `LAST_CRAWL_DATE` 的默认逻辑。
+        """
         # 获取配置的分类
         categories_str = self.db.get_config('CATEGORIES', '')
         if force_categories:
@@ -102,23 +105,41 @@ class ArxivService:
         else:
             categories = self.config.DEFAULT_CATEGORIES
         
-        # 确定爬取时间范围
-        last_crawl_date_str = self.db.get_config('LAST_CRAWL_DATE')
-        
-        if last_crawl_date_str:
-            # 非初次使用：从上次爬取日期的后一天开始
-            last_crawl_date = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
-            start_dt = last_crawl_date + timedelta(days=1)
-            end_dt = datetime.now() - timedelta(days=1)
+        # 如果显式提供了 start_date/end_date（格式 YYYY-MM-DD），使用它们
+        if start_date or end_date:
+            try:
+                if start_date:
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                else:
+                    start_dt = datetime.now() - timedelta(days=30)
+
+                if end_date:
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                else:
+                    end_dt = datetime.now()
+            except Exception as e:
+                print(f"解析传入日期失败: {e}")
+                return 0
+
         else:
-            # 初次使用：爬取最近7天（不含今天）
-            end_dt = datetime.now() - timedelta(days=1)
-            start_dt = datetime.now() - timedelta(days=8)
+            # 确定爬取时间范围（基于上次爬取日期或默认最近7天）
+            last_crawl_date_str = self.db.get_config('LAST_CRAWL_DATE')
+
+            if last_crawl_date_str:
+                # 非初次使用：从上次爬取日期的后一天开始
+                last_crawl_date = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
+                start_dt = last_crawl_date + timedelta(days=1)
+                end_dt = datetime.now() - timedelta(days=1)
+            else:
+                # 初次使用：爬取最近7天（不含今天）
+                end_dt = datetime.now() - timedelta(days=1)
+                start_dt = datetime.now() - timedelta(days=8)
 
         # 如果计算得到的起始日期晚于结束日期，调整为相同日期（避免反向区间）
         if start_dt > end_dt:
             start_dt = end_dt
 
+        # arXiv API 期望 YYYYMMDD 格式
         start_date = start_dt.strftime('%Y%m%d')
         end_date = end_dt.strftime('%Y%m%d')
         

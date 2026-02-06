@@ -391,10 +391,12 @@ def clean_cache():
 def crawl_now():
     """立即爬取"""
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         categories = data.get('categories')
-        
-        count = arxiv_service.crawl_recent_papers(categories)
+        start_date = data.get('start_date')  # expected YYYY-MM-DD or None
+        end_date = data.get('end_date')
+
+        count = arxiv_service.crawl_recent_papers(force_categories=categories, start_date=start_date, end_date=end_date)
         
         return jsonify({
             'success': True,
