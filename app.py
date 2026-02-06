@@ -208,6 +208,25 @@ def update_favorite_summary():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@app.route('/api/config/cache-size', methods=['GET', 'POST'])
+def cache_size_config():
+    """获取或设置预评估缓存大小"""
+    try:
+        if request.method == 'GET':
+            n = db.get_config('CACHE_SIZE', '')
+            n_val = int(n) if n and str(n).isdigit() else 0
+            return jsonify({'success': True, 'data': {'cache_size': n_val}})
+        else:
+            data = request.get_json()
+            n = int(data.get('cache_size', 0))
+            if n < 0:
+                return jsonify({'success': False, 'error': 'cache_size 必须 >= 0'}), 400
+            db.set_config('CACHE_SIZE', n)
+            return jsonify({'success': True, 'message': '缓存大小已更新'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # === 推荐API ===
 
 @app.route('/api/recommendation/next')
@@ -227,6 +246,17 @@ def get_next_recommendation():
                 'data': None,
                 'message': '暂无更多推荐论文'
             })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/recommendation/preload')
+def preload_recommendations():
+    """批量预评估并返回已评估的论文（用于前端预加载缓存）。使用 query 参数 count 控制数量"""
+    try:
+        count = int(request.args.get('count', 5))
+        papers = recommendation_service.pre_evaluate_papers(count)
+        return jsonify({'success': True, 'data': {'papers': papers}})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

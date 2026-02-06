@@ -177,6 +177,45 @@ class RecommendationService:
         """
         result = self.db.execute_query(query)
         return result[0]['total'] if result else 0
+
+    def pre_evaluate_papers(self, count: int = 5):
+        """对未评估的论文批量调用LLM进行评估并保存结果，返回评估后的论文列表"""
+        papers = self.db.get_papers_for_recommendation(limit=count)
+        evaluated = []
+
+        for row in papers:
+            paper = dict(row)
+            try:
+                user_interests = self.db.get_config('USER_INTERESTS', '')
+                favorite_summary = self.db.get_config('FAVORITE_SUMMARY', '')
+
+                eval_result = self.llm_service.evaluate_paper(paper, user_interests, favorite_summary)
+                is_recommended = eval_result.get('is_recommended', False)
+                reason = eval_result.get('reason', '')
+
+                # 更新评估状态和推荐理由
+                self.db.update_paper_evaluation(paper['id'], is_recommended, recommendation_reason=reason)
+
+                chinese_title = ''
+                chinese_abstract = ''
+                if is_recommended:
+                    try:
+                        translation = self.llm_service.translate_paper_info(paper['title'], paper['abstract'])
+                        chinese_title = translation.get('chinese_title', '')
+                        chinese_abstract = translation.get('chinese_abstract', '')
+                        self.db.update_paper_translation(paper['id'], chinese_title, chinese_abstract)
+                    except Exception as e:
+                        print(f"翻译论文时出错: {e}")
+
+                paper['recommendation_reason'] = reason
+                paper['chinese_title'] = chinese_title
+                paper['chinese_abstract'] = chinese_abstract
+                evaluated.append(paper)
+            except Exception as e:
+                print(f"预评估论文时出错 (id={paper.get('id')}): {e}")
+                continue
+
+        return evaluated
     
     def get_maybe_later_list(self, page: int = 1, per_page: int = 10) -> Dict:
         """获取稍后再说列表（分页）"""

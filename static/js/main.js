@@ -4,6 +4,7 @@ class ArxivAgentApp {
         this.currentTab = 'recommendation';
         this.currentListTab = 'favorites';
         this.currentPaper = null;
+        this.cacheQueue = [];
         this.init();
     }
 
@@ -67,6 +68,23 @@ class ArxivAgentApp {
             this.saveFavoriteSummary();
         });
 
+        // 缓存设置保存按钮
+        const cacheForm = document.getElementById('cache-size-form');
+        if (cacheForm) {
+            cacheForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const n = parseInt(document.getElementById('cache-size').value || 0, 10);
+                try {
+                    await api.updateCacheSize(n);
+                    utils.showNotification('缓存大小已保存', 'success');
+                    // 重新预加载缓存
+                    await this.warmCache();
+                } catch (err) {
+                    utils.showNotification('保存缓存大小失败: ' + err.message, 'error');
+                }
+            });
+        }
+
         // 维护按钮
         document.getElementById('crawl-now-btn').addEventListener('click', () => {
             this.crawlNow();
@@ -106,7 +124,26 @@ class ArxivAgentApp {
         await this.loadConfigStatus();
         await this.loadSettingsData();
         await this.loadRecommendationStatus();
+        // 预加载缓存（若设置了缓存大小），再加载首条推荐
+        await this.warmCache();
         this.loadNextRecommendation();
+    }
+
+    async warmCache() {
+        try {
+            const resp = await api.getCacheSize();
+            if (resp && resp.success && resp.data) {
+                const n = resp.data.cache_size || 0;
+                if (n > 0) {
+                    const preload = await api.preloadRecommendations(n);
+                    if (preload && preload.success && preload.data && Array.isArray(preload.data.papers)) {
+                        this.cacheQueue = preload.data.papers.slice();
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('预加载缓存失败:', e);
+        }
     }
 
     async loadRecommendationStatus() {
@@ -192,8 +229,21 @@ class ArxivAgentApp {
             this.loadLLMConfig(),
             this.loadUserInterests(),
             this.loadCategories(),
-            this.loadFavoriteSummary()
+            this.loadFavoriteSummary(),
+            this.loadCacheSize()
         ]);
+    }
+
+    async loadCacheSize() {
+        try {
+            const resp = await api.getCacheSize();
+            if (resp && resp.success && resp.data) {
+                const el = document.getElementById('cache-size');
+                if (el) el.value = resp.data.cache_size || '';
+            }
+        } catch (e) {
+            console.error('加载缓存大小失败:', e);
+        }
     }
 
     async loadLLMConfig() {
@@ -341,6 +391,18 @@ class ArxivAgentApp {
         loadingEl.style.display = 'flex';
         contentEl.style.display = 'none';
         emptyEl.style.display = 'none';
+
+        // 优先从预加载队列中取出
+        if (this.cacheQueue && this.cacheQueue.length > 0) {
+            const paper = this.cacheQueue.shift();
+            this.currentPaper = paper;
+            this.displayPaperCard(paper);
+            loadingEl.style.display = 'none';
+            contentEl.style.display = 'flex';
+            // 异步补充缓存（如果还设置了缓存大小）
+            (async () => { try { await this.warmCache(); } catch(e){} })();
+            return;
+        }
 
         try {
             const response = await api.getNextRecommendation();

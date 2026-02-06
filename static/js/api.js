@@ -107,6 +107,10 @@ class APIClient {
         return this.request('/recommendation/status');
     }
 
+    async preloadRecommendations(count = 5) {
+        return this.request(`/recommendation/preload?count=${count}`);
+    }
+
     async sendFeedback(feedback) {
         return this.request('/recommendation/feedback', {
             method: 'POST',
@@ -155,6 +159,18 @@ class APIClient {
         return this.request('/system/crawl-now', {
             method: 'POST',
             body: categories ? { categories } : {}
+        });
+    }
+
+    // 缓存配置
+    async getCacheSize() {
+        return this.request('/config/cache-size');
+    }
+
+    async updateCacheSize(n) {
+        return this.request('/config/cache-size', {
+            method: 'POST',
+            body: { cache_size: n }
         });
     }
 }

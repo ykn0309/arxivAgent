@@ -180,6 +180,21 @@
                         </form>
                     </div>
 
+                    <!-- 推荐缓存设置 -->
+                    <div class="settings-section">
+                        <h2>⚡ 推荐缓存</h2>
+                        <form id="cache-size-form" class="config-form">
+                            <div class="form-group">
+                                <label for="cache-size">预评估缓存大小 (n)：</label>
+                                <input type="number" id="cache-size" min="0" step="1" placeholder="例如：5">
+                                <small class="form-help">前端会预加载 n 篇 LLM 已评估论文，减少等待。</small>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" id="save-cache-size-btn" class="primary-btn">保存缓存设置</button>
+                            </div>
+                        </form>
+                    </div>
+
                     <!-- 研究兴趣配置 -->
                     <div class="settings-section">
                         <h2>🎯 研究兴趣</h2>
