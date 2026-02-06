@@ -228,6 +228,19 @@ class DatabaseManager:
         '''
         return self.execute_query(query, (limit, offset))
 
+    def get_recommended_unseen(self, limit=10, offset=0):
+        """获取已被LLM标记为推荐但尚未被用户处理的论文（未收藏/未标记为稍后/未标记为不感兴趣）"""
+        query = '''
+            SELECT *, id as paper_id FROM papers
+            WHERE is_recommended = 1
+            AND (favorite IS NULL OR favorite = 0)
+            AND (maybe_later IS NULL OR maybe_later = 0)
+            AND (disliked IS NULL OR disliked = 0)
+            ORDER BY published_date DESC
+            LIMIT ? OFFSET ?
+        '''
+        return self.execute_query(query, (limit, offset))
+
     def count_maybe_later(self):
         query = 'SELECT COUNT(*) as total FROM papers WHERE maybe_later = 1'
         res = self.execute_query(query)
