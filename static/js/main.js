@@ -4,12 +4,23 @@ class ArxivAgentApp {
         this.currentTab = 'recommendation';
         this.currentListTab = 'favorites';
         this.currentPaper = null;
+        this._statusInterval = null;
         this.init();
     }
 
     init() {
         this.bindEvents();
         this.loadInitialData();
+        // 每 30 秒刷新一次推荐进度（仅数字），不刷新推荐卡片
+        this._statusInterval = setInterval(() => this.loadRecommendationStatus(), 30000);
+    }
+
+    // 可用于在需要时停止自动刷新
+    stopStatusAutoRefresh() {
+        if (this._statusInterval) {
+            clearInterval(this._statusInterval);
+            this._statusInterval = null;
+        }
     }
 
     bindEvents() {
