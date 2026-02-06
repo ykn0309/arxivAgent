@@ -371,8 +371,14 @@ def clean_cache():
     """清理缓存"""
     try:
         days_old = int(request.args.get('days', 30))
-        deleted_count = recommendation_service.clean_old_papers(days_old)
-        
+        # 默认只删除被标记为不喜欢的论文
+        only_disliked = request.args.get('only_disliked', 'true').lower() in ('1', 'true', 'yes')
+
+        if only_disliked:
+            deleted_count = recommendation_service.clean_old_papers(days_old)
+        else:
+            # 如果将来需要支持删除非 disliked 的论文，可扩展此处
+            deleted_count = recommendation_service.clean_old_papers(days_old)
         return jsonify({
             'success': True,
             'message': f'已清理 {deleted_count} 篇旧论文',

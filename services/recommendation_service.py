@@ -272,26 +272,29 @@ class RecommendationService:
         return self.db.unmark_maybe_later(paper_id)
     
     def clean_old_papers(self, days_old: int = 30):
-        """清理旧论文（保留收藏和稍后再说）"""
+        """清理旧论文。
+
+        默认行为：删除已被用户标记为不喜欢（`disliked=1`）且发表日期早于 cutoff 的论文。
+        该操作不会删除被收藏或标记为稍后再说的论文（作为额外保护）。
+        """
         from datetime import datetime, timedelta
-        
+
         cutoff_date = (datetime.now() - timedelta(days=days_old)).strftime('%Y-%m-%d')
-        
-        # 获取要保留的论文ID（收藏 或 稍后再说）
+
+        # 首先排除被收藏或稍后再说的论文
         protected_result = self.db.execute_query('SELECT id as paper_id FROM papers WHERE favorite = 1 OR maybe_later = 1')
         protected_ids = [str(row['paper_id']) for row in protected_result]
-        
+
         if protected_ids:
-            # 删除不在保护列表中的旧论文
             delete_query = f'''
-                DELETE FROM papers 
-                WHERE published_date < ? 
+                DELETE FROM papers
+                WHERE published_date < ?
+                AND disliked = 1
                 AND id NOT IN ({','.join(['?'] * len(protected_ids))})
             '''
             params = [cutoff_date] + protected_ids
         else:
-            # 没有保护的论文，直接删除旧论文
-            delete_query = 'DELETE FROM papers WHERE published_date < ?'
+            delete_query = 'DELETE FROM papers WHERE published_date < ? AND disliked = 1'
             params = [cutoff_date]
-        
+
         return self.db.execute_query(delete_query, params)

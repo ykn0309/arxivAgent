@@ -107,10 +107,6 @@ class APIClient {
         return this.request('/recommendation/status');
     }
 
-    async preloadRecommendations(count = 5) {
-        return this.request(`/recommendation/preload?count=${count}`);
-    }
-
     async sendFeedback(feedback) {
         return this.request('/recommendation/feedback', {
             method: 'POST',
@@ -137,20 +133,20 @@ class APIClient {
     async deleteFavorite(favoriteId) {
         return this.request('/list/delete-favorite', {
             method: 'POST',
-            body: { favorite_id: favoriteId }
+            body: { paper_id: favoriteId }
         });
     }
 
     async deleteMaybeLater(maybeLaterId) {
         return this.request('/list/delete-maybe-later', {
             method: 'POST',
-            body: { maybe_later_id: maybeLaterId }
+            body: { paper_id: maybeLaterId }
         });
     }
 
     // 系统维护
     async cleanCache(days = 30) {
-        return this.request(`/system/clean-cache?days=${days}`, {
+        return this.request(`/system/clean-cache?days=${days}&only_disliked=true`, {
             method: 'POST'
         });
     }
@@ -159,18 +155,6 @@ class APIClient {
         return this.request('/system/crawl-now', {
             method: 'POST',
             body: categories ? { categories } : {}
-        });
-    }
-
-    // 缓存配置
-    async getCacheSize() {
-        return this.request('/config/cache-size');
-    }
-
-    async updateCacheSize(n) {
-        return this.request('/config/cache-size', {
-            method: 'POST',
-            body: { cache_size: n }
         });
     }
 }

@@ -971,13 +971,15 @@ class ArxivAgentApp {
     }
 
     async cleanCache() {
-        if (!confirm('确定要清理30天前的缓存吗？收藏和稍后再说的论文不会被删除。')) return;
-        
+        const select = document.getElementById('clean-cache-range');
+        const days = select ? parseInt(select.value, 10) : 30;
+        if (!confirm(`确定要清理 ${days} 天前的缓存吗？仅删除被标记为不喜欢的论文。`)) return;
+
         try {
             utils.showLoading('清理中...');
-            const response = await api.cleanCache();
+            const response = await api.cleanCache(days);
             utils.hideLoading();
-            
+
             if (response.success) {
                 utils.showNotification(response.message, 'success');
             }
