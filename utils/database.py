@@ -18,8 +18,15 @@ class DatabaseManager:
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        # 创建论文表
+        # 为了简化测试环境，直接在 papers 表内保存收藏/稍后/不喜欢等状态，移除单独表
+        # 如果存在旧的 favorites / maybe_later 表，先删除（测试环境允许直接删除）
+        try:
+            cursor.execute('DROP TABLE IF EXISTS favorites')
+            cursor.execute('DROP TABLE IF EXISTS maybe_later')
+        except Exception:
+            pass
+
+        # 创建论文表（包含收藏/稍后/不喜欢等字段）
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS papers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,12 +44,15 @@ class DatabaseManager:
                 recommendation_reason TEXT,
                 chinese_title TEXT,
                 chinese_abstract TEXT,
+                favorite BOOLEAN DEFAULT FALSE,
+                favorite_marked_at TEXT,
+                maybe_later BOOLEAN DEFAULT FALSE,
+                maybe_later_marked_at TEXT,
+                disliked BOOLEAN DEFAULT FALSE,
+                is_summarized BOOLEAN DEFAULT FALSE,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # 旧的 `favorites` / `maybe_later` 表已迁移到 papers.user_status。
-        # 不再在新版本中创建这些独立表，保留迁移代码以处理历史数据。
         
         # 创建配置表
         cursor.execute('''
@@ -54,42 +64,66 @@ class DatabaseManager:
             )
         ''')
         
-        # 迁移：为已有的 papers 表添加列（如果不存在）
+        # 对于可能存在的旧表结构，尝试按需添加缺失列（更稳健）
         cursor.execute("PRAGMA table_info(papers)")
         columns = [column[1] for column in cursor.fetchall()]
-        if 'recommendation_reason' not in columns:
-            cursor.execute('ALTER TABLE papers ADD COLUMN recommendation_reason TEXT')
-        if 'chinese_title' not in columns:
-            cursor.execute('ALTER TABLE papers ADD COLUMN chinese_title TEXT')
-        if 'chinese_abstract' not in columns:
-            cursor.execute('ALTER TABLE papers ADD COLUMN chinese_abstract TEXT')
-        if 'user_status' not in columns:
-            # user_status: 'none' | 'favorite' | 'maybe_later' | 'dislike'
-            cursor.execute("ALTER TABLE papers ADD COLUMN user_status TEXT DEFAULT 'none'")
-        if 'favorite_summarized' not in columns:
-            cursor.execute("ALTER TABLE papers ADD COLUMN favorite_summarized BOOLEAN DEFAULT FALSE")
+        needed_cols = {
+            'recommendation_reason': 'TEXT',
+            'chinese_title': 'TEXT',
+            'chinese_abstract': 'TEXT',
+            'favorite': 'BOOLEAN',
+            'favorite_marked_at': 'TEXT',
+            'maybe_later': 'BOOLEAN',
+            'maybe_later_marked_at': 'TEXT',
+            'disliked': 'BOOLEAN',
+            'is_summarized': 'BOOLEAN'
+        }
+        for col, coltype in needed_cols.items():
+            if col not in columns:
+                try:
+                    cursor.execute(f'ALTER TABLE papers ADD COLUMN {col} {coltype}')
+                except Exception:
+                    pass
 
-        # 如果历史上存在 favorites / maybe_later 表，则迁移它们的数据到 papers.user_status
-        # 并删除冗余表
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='favorites'")
-        if cursor.fetchone():
-            try:
-                # 将 favorites 表中的 paper_id 标记为 favorite
-                cursor.execute('SELECT paper_id FROM favorites')
-                fav_rows = cursor.fetchall()
-                for row in fav_rows:
-                    cursor.execute("UPDATE papers SET user_status = 'favorite' WHERE id = ?", (row[0],))
-                # 将 maybe_later 表中的 paper_id 标记为 maybe_later
-                cursor.execute('SELECT paper_id FROM maybe_later')
-                ml_rows = cursor.fetchall()
-                for row in ml_rows:
-                    cursor.execute("UPDATE papers SET user_status = 'maybe_later' WHERE id = ?", (row[0],))
-                # 删除旧表
-                cursor.execute('DROP TABLE IF EXISTS favorites')
-                cursor.execute('DROP TABLE IF EXISTS maybe_later')
-            except Exception:
-                # 如果迁移失败，不要阻塞启动
-                pass
+        # 如果旧表包含 `favorite_note` 列，则进行迁移：创建新表并复制数据（不包含该列）
+        if 'favorite_note' in columns:
+            # 构建新表结构（与上面 CREATE TABLE 一致）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS papers_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    arxiv_id TEXT UNIQUE NOT NULL,
+                    title TEXT NOT NULL,
+                    abstract TEXT,
+                    authors TEXT,
+                    categories TEXT,
+                    published_date TEXT,
+                    updated_date TEXT,
+                    pdf_url TEXT,
+                    arxiv_url TEXT,
+                    is_recommended BOOLEAN DEFAULT FALSE,
+                    llm_evaluated BOOLEAN DEFAULT FALSE,
+                    recommendation_reason TEXT,
+                    chinese_title TEXT,
+                    chinese_abstract TEXT,
+                    favorite BOOLEAN DEFAULT FALSE,
+                    favorite_marked_at TEXT,
+                    maybe_later BOOLEAN DEFAULT FALSE,
+                    maybe_later_marked_at TEXT,
+                    disliked BOOLEAN DEFAULT FALSE,
+                    is_summarized BOOLEAN DEFAULT FALSE,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # 将旧表的数据复制到新表（排除 favorite_note 列）
+            copy_cols = [c for c in columns if c != 'favorite_note']
+            cols_csv = ', '.join(copy_cols)
+            cursor.execute(f'INSERT OR REPLACE INTO papers_new ({cols_csv}) SELECT {cols_csv} FROM papers')
+            cursor.execute('DROP TABLE papers')
+            cursor.execute('ALTER TABLE papers_new RENAME TO papers')
+            # 刷新 columns 变量
+            cursor.execute("PRAGMA table_info(papers)")
+            columns = [column[1] for column in cursor.fetchall()]
         
         conn.commit()
         conn.close()
@@ -135,18 +169,76 @@ class DatabaseManager:
             paper_data.get('arxiv_url')
         )
         return self.execute_query(query, params)
+
+    # 新的状态操作方法（将 favorite / maybe_later / disliked 状态保存在 papers 表）
+    def mark_favorite(self, paper_id, user_note=None):
+        query = '''
+            UPDATE papers SET favorite = 1, favorite_marked_at = datetime('now')
+            WHERE id = ?
+        '''
+        return self.execute_query(query, (paper_id,))
+
+    def unmark_favorite(self, paper_id):
+        query = '''
+            UPDATE papers SET favorite = 0, favorite_marked_at = NULL
+            WHERE id = ?
+        '''
+        return self.execute_query(query, (paper_id,))
+
+    def mark_maybe_later(self, paper_id):
+        query = '''
+            UPDATE papers SET maybe_later = 1, maybe_later_marked_at = datetime('now')
+            WHERE id = ?
+        '''
+        return self.execute_query(query, (paper_id,))
+
+    def unmark_maybe_later(self, paper_id):
+        query = '''
+            UPDATE papers SET maybe_later = 0, maybe_later_marked_at = NULL
+            WHERE id = ?
+        '''
+        return self.execute_query(query, (paper_id,))
+
+    def mark_disliked(self, paper_id):
+        query = '''
+            UPDATE papers SET disliked = 1 WHERE id = ?
+        '''
+        return self.execute_query(query, (paper_id,))
+
+    def get_favorites(self, limit=10, offset=0):
+        query = '''
+            SELECT *, id as paper_id FROM papers
+            WHERE favorite = 1
+            ORDER BY favorite_marked_at DESC
+            LIMIT ? OFFSET ?
+        '''
+        return self.execute_query(query, (limit, offset))
+
+    def count_favorites(self):
+        query = 'SELECT COUNT(*) as total FROM papers WHERE favorite = 1'
+        res = self.execute_query(query)
+        return res[0]['total'] if res else 0
+
+    def get_maybe_later(self, limit=10, offset=0):
+        query = '''
+            SELECT *, id as paper_id FROM papers
+            WHERE maybe_later = 1
+            ORDER BY maybe_later_marked_at DESC
+            LIMIT ? OFFSET ?
+        '''
+        return self.execute_query(query, (limit, offset))
+
+    def count_maybe_later(self):
+        query = 'SELECT COUNT(*) as total FROM papers WHERE maybe_later = 1'
+        res = self.execute_query(query)
+        return res[0]['total'] if res else 0
     
     def get_papers_for_recommendation(self, limit=10):
         """获取待推荐的论文"""
-        # 优先返回已被LLM评估且被推荐但尚未被用户标记的论文（user_status = 'none'）
-        # 其次返回尚未被LLM评估的论文
         query = '''
-            SELECT * FROM papers
-            WHERE (
-                (llm_evaluated = TRUE AND is_recommended = TRUE AND user_status = 'none')
-                OR (llm_evaluated = FALSE)
-            )
-            ORDER BY CASE WHEN is_recommended = TRUE THEN 0 ELSE 1 END, published_date DESC
+            SELECT * FROM papers 
+            WHERE llm_evaluated = FALSE AND is_recommended = FALSE
+            ORDER BY published_date DESC
             LIMIT ?
         '''
         return self.execute_query(query, (limit,))
@@ -168,24 +260,7 @@ class DatabaseManager:
             WHERE id = ?
         '''
         return self.execute_query(query, (chinese_title, chinese_abstract, paper_id))
-
-    def set_user_status(self, paper_id, status='none'):
-        """设置论文的用户状态（favorite/maybe_later/dislike/none）"""
-        query = '''
-            UPDATE papers SET user_status = ? WHERE id = ?
-        '''
-        return self.execute_query(query, (status, paper_id))
-
-    def get_papers_by_user_status(self, status, limit=10, offset=0):
-        query = '''
-            SELECT * FROM papers
-            WHERE user_status = ?
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-        '''
-        return self.execute_query(query, (status, limit, offset))
     
-    # Legacy helper methods for old tables were removed. Use `set_user_status(paper_id, status)` instead.
     
     def get_config(self, key, default=None):
         """获取配置值"""
@@ -204,17 +279,16 @@ class DatabaseManager:
         return self.execute_query(query, (key, str(value)))
     
     def get_unsummarized_favorites(self):
-        """获取未总结的收藏论文（迁移后基于 papers.user_status）"""
+        """获取未总结的收藏论文"""
         query = '''
-            SELECT p.*
-            FROM papers p
-            WHERE p.user_status = 'favorite' AND (p.favorite_summarized IS NULL OR p.favorite_summarized = FALSE)
+            SELECT * FROM papers
+            WHERE favorite = 1 AND is_summarized = FALSE
         '''
         return self.execute_query(query)
     
     def mark_favorite_summarized(self, favorite_id):
-        """标记收藏已总结（传入 paper_id）"""
-        query = 'UPDATE papers SET favorite_summarized = TRUE WHERE id = ?'
+        """标记收藏已总结"""
+        query = 'UPDATE papers SET is_summarized = TRUE WHERE id = ?'
         return self.execute_query(query, (favorite_id,))
     
     def reset_database(self):
@@ -223,7 +297,7 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
-            # 清空所有数据表（旧表已合并至 `papers`）
+            # 清空所有数据表
             tables = ['papers', 'config']
             for table in tables:
                 cursor.execute(f'DELETE FROM {table}')
