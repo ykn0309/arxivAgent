@@ -140,6 +140,14 @@ python app.py
 - `POST /api/list/delete-favorite` - 删除收藏
 - `POST /api/list/delete-maybe-later` - 删除稍后再说
 
+### 列表管理（实现细节）
+- 列表接口仍然可用用于查看和管理收藏/稍后再说的论文，但在实现层面，用户的标记现在统一存储在 `papers.user_status` 字段中（取值：`none`、`favorite`、`maybe_later`、`dislike`）。
+- 现有 API：`GET /api/list/favorites`、`GET /api/list/maybe-later` 等行为不变，但它们查询的是 `papers` 表中的 `user_status` 字段，而不再依赖独立的 `favorites` / `maybe_later` 表。
+- 对外接口：
+- `POST /api/list/move-to-favorite` - 将指定 `paper_id` 的论文标记为 `favorite`
+- `POST /api/list/delete-favorite` - 将指定 `paper_id` 的论文标记回 `none`
+- `POST /api/list/delete-maybe-later` - 将指定 `paper_id` 的论文标记回 `none`
+
 ### 系统维护
 - `POST /api/system/clean-cache` - 清理缓存
 - `POST /api/system/crawl-now` - 立即爬取
@@ -147,10 +155,9 @@ python app.py
 ## 数据库结构
 
 ### 主要表结构
-- **papers**: 存储爬取的论文信息
+- **papers**: 存储爬取的论文信息（包含用户标记）
   - 新增字段: `recommendation_reason`（推荐理由）、`chinese_title`（中文标题）、`chinese_abstract`（中文摘要）
-- **favorites**: 用户收藏的论文
-- **maybe_later**: 稍后再说的论文
+  - 用户标记字段: `user_status`（字符串，取值：`none`、`favorite`、`maybe_later`、`dislike`），用于替代历史上的独立 `favorites` / `maybe_later` 表
 - **config**: 系统配置信息
 
 ## 开发指南
