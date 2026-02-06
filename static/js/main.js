@@ -4,7 +4,6 @@ class ArxivAgentApp {
         this.currentTab = 'recommendation';
         this.currentListTab = 'favorites';
         this.currentPaper = null;
-        this.recommendationQueue = [];
         this.init();
     }
 
@@ -107,31 +106,17 @@ class ArxivAgentApp {
         await this.loadConfigStatus();
         await this.loadSettingsData();
         await this.loadRecommendationStatus();
-        // 预取两条推荐以改善切换体验
-        await this.prefetchNextRecommendation();
-        await this.prefetchNextRecommendation();
         this.loadNextRecommendation();
-    }
-
-    async prefetchNextRecommendation() {
-        try {
-            const resp = await api.getNextRecommendation();
-            if (resp && resp.success && resp.data) {
-                // push 到队列尾部
-                this.recommendationQueue.push(resp.data);
-            }
-        } catch (e) {
-            console.warn('预取推荐失败:', e);
-        }
     }
 
     async loadRecommendationStatus() {
         try {
             const resp = await api.getRecommendationStatus();
             if (resp.success && resp.data) {
-                const pending = resp.data.pending;
+                const pending = resp.data.pending || 0;
+                const rec_unseen = resp.data.recommended_unseen || 0;
                 const el = document.getElementById('recommendation-remaining');
-                if (el) el.textContent = pending;
+                if (el) el.textContent = `${rec_unseen} / ${pending}`; // 已评估待看 / 待评估
             }
         } catch (e) {
             console.error('加载推荐进度失败:', e);
@@ -354,18 +339,6 @@ class ArxivAgentApp {
         const contentEl = document.getElementById('card-content');
         const emptyEl = document.getElementById('card-empty');
 
-        // 如果队列中已有预取项，立即显示队列头，减少等待
-        if (this.recommendationQueue.length > 0) {
-            const next = this.recommendationQueue.shift();
-            this.currentPaper = next;
-            this.displayPaperCard(next);
-            loadingEl.style.display = 'none';
-            contentEl.style.display = 'flex';
-            // 异步补充队列
-            this.prefetchNextRecommendation();
-            return;
-        }
-
         loadingEl.style.display = 'flex';
         contentEl.style.display = 'none';
         emptyEl.style.display = 'none';
@@ -493,19 +466,10 @@ class ArxivAgentApp {
             
             utils.hideLoading();
             utils.showNotification('反馈已处理', 'success');
-            // 立即展示预取项（如果有），提升用户体验
-            if (this.recommendationQueue.length > 0) {
-                const next = this.recommendationQueue.shift();
-                this.currentPaper = next;
-                this.displayPaperCard(next);
-                // 异步补充队列
-                this.prefetchNextRecommendation();
-            } else {
-                // 回退到正常加载流程
-                this.loadNextRecommendation();
-            }
-
-            // 刷新剩余计数（后台进行）
+            
+            // 加载下一个推荐
+            this.loadNextRecommendation();
+            // 刷新剩余计数
             this.loadRecommendationStatus();
             
         } catch (error) {
@@ -584,12 +548,12 @@ class ArxivAgentApp {
             paperElement.className = 'paper-item';
             
             // 使用正确的 id 字段：
-            // - 列表接口现在统一返回 `paper.id`，前端应使用 `paper.id` 作为唯一标识
-            // - 后端通过 `papers.user_status` 字段区分 'favorite' / 'maybe_later' 等状态
+            // - 收藏列表包含 `favorite_id` 和 `paper_id`
+            // - 稍后再说列表包含 `maybe_later_id` 和 `paper_id`
             const actionsHtml = isMaybeLater ? 
-                `<button class="item-action-btn move-btn" data-paper-id="${paper.id}">移到收藏</button>
-                 <button class="item-action-btn delete-btn" data-paper-id="${paper.id}">删除</button>` :
-                `<button class="item-action-btn delete-btn" data-paper-id="${paper.id}">删除</button>`;
+                `<button class="item-action-btn move-btn" data-paper-id="${paper.paper_id}">移到收藏</button>
+                 <button class="item-action-btn delete-btn" data-paper-id="${paper.paper_id}">删除</button>` :
+                `<button class="item-action-btn delete-btn" data-paper-id="${paper.paper_id}">删除</button>`;
 
             // 解析categories
             let categories = [];

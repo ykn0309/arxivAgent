@@ -13,6 +13,9 @@ class RecommendationService:
         self.arxiv_service = ArxivService()
         self.llm_service = LLMService()
         self.db = DatabaseManager()
+        # 后台评估状态追踪
+        self.last_evaluation_run = None
+        self.last_evaluated_count = 0
     
     def get_next_recommendation(self) -> Optional[Dict]:
         """获取下一条推荐论文"""
@@ -25,11 +28,8 @@ class RecommendationService:
         # 否则，按照旧逻辑评估下一篇未评估论文（同步行为，可能较慢）
         papers = self.db.get_papers_for_recommendation(limit=1)
         if not papers:
-            # 如果没有待评估论文，触发爬取并重试
-            self.arxiv_service.crawl_recent_papers()
-            papers = self.db.get_papers_for_recommendation(limit=1)
-            if not papers:
-                return None
+            # 无待评估论文，直接返回 None（不自动触发爬取）
+            return None
 
         paper = papers[0]
 
@@ -94,6 +94,10 @@ class RecommendationService:
             print("无法读取 LLM 配置，跳过后台评估")
             return
 
+        evaluated_total = 0
+        from datetime import datetime
+        self.last_evaluation_run = datetime.utcnow().isoformat()
+
         while True:
             papers = self.db.get_papers_for_recommendation(limit=batch_size)
             if not papers:
@@ -125,6 +129,10 @@ class RecommendationService:
 
                 if delay and delay > 0:
                     time.sleep(delay)
+                evaluated_total += 1
+
+            # 记录评估统计信息
+            self.last_evaluated_count = evaluated_total
 
     def start_background_evaluation(self, batch_size: int = 10, delay: float = 0.0):
         """启动后台线程执行一次性评估任务（守护线程）。"""
@@ -203,6 +211,33 @@ class RecommendationService:
         """
         result = self.db.execute_query(query)
         return result[0]['total'] if result else 0
+
+    def get_evaluation_status(self) -> Dict:
+        """返回评估相关的状态信息：
+        - pending: 未由LLM评估的论文数量
+        - recommended_unseen: 已被LLM标记为推荐但用户尚未处理的数量
+        - last_run: 后台最近一次评估时间（UTC ISO 格式，若无则为空）
+        - last_evaluated_count: 最近一次评估运行处理的论文数量
+        """
+        # 待评估数量
+        pending = self.get_pending_count()
+        # 已评估且未被用户处理的推荐数量
+        query = """
+            SELECT COUNT(*) as total FROM papers
+            WHERE is_recommended = 1
+            AND (favorite IS NULL OR favorite = 0)
+            AND (maybe_later IS NULL OR maybe_later = 0)
+            AND (disliked IS NULL OR disliked = 0)
+        """
+        res = self.db.execute_query(query)
+        recommended_unseen = res[0]['total'] if res else 0
+
+        return {
+            'pending': pending,
+            'recommended_unseen': recommended_unseen,
+            'last_run': self.last_evaluation_run,
+            'last_evaluated_count': self.last_evaluated_count
+        }
     
     def get_maybe_later_list(self, page: int = 1, per_page: int = 10) -> Dict:
         """获取稍后再说列表（分页）"""

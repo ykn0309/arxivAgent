@@ -282,10 +282,10 @@ def get_favorites():
 def recommendation_status():
     """获取推荐进度状态：待评估论文数量"""
     try:
-        pending = recommendation_service.get_pending_count()
+        status = recommendation_service.get_evaluation_status()
         return jsonify({
             'success': True,
-            'data': {'pending': pending}
+            'data': status
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
