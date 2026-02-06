@@ -22,10 +22,12 @@ class Paper(Base):
     is_recommended = Column(Boolean, default=False)
     llm_evaluated = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # 关系
-    favorites = relationship("Favorite", back_populates="paper", cascade="all, delete-orphan")
-    maybe_laters = relationship("MaybeLater", back_populates="paper", cascade="all, delete-orphan")
+    # 新增字段：推荐理由、中文翻译与用户状态
+    recommendation_reason = Column(Text)
+    chinese_title = Column(Text)
+    chinese_abstract = Column(Text)
+    user_status = Column(String(20), default='none', index=True)  # 'none'|'favorite'|'maybe_later'|'dislike'
+    favorite_summarized = Column(Boolean, default=False)
     
     def to_dict(self):
         """转换为字典格式"""
@@ -43,51 +45,15 @@ class Paper(Base):
             'is_recommended': self.is_recommended,
             'llm_evaluated': self.llm_evaluated,
             'created_at': self.created_at.isoformat() if self.created_at else None
+            ,
+            'recommendation_reason': self.recommendation_reason,
+            'chinese_title': self.chinese_title,
+            'chinese_abstract': self.chinese_abstract,
+            'user_status': self.user_status,
+            'favorite_summarized': self.favorite_summarized
         }
 
-class Favorite(Base):
-    """收藏论文模型"""
-    __tablename__ = 'favorites'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    paper_id = Column(Integer, ForeignKey('papers.id'), nullable=False)
-    user_note = Column(Text)
-    is_summarized = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # 关系
-    paper = relationship("Paper", back_populates="favorites")
-    
-    def to_dict(self):
-        """转换为字典格式"""
-        return {
-            'id': self.id,
-            'paper_id': self.paper_id,
-            'user_note': self.user_note,
-            'is_summarized': self.is_summarized,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'paper': self.paper.to_dict() if self.paper else None
-        }
-
-class MaybeLater(Base):
-    """稍后再说论文模型"""
-    __tablename__ = 'maybe_later'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    paper_id = Column(Integer, ForeignKey('papers.id'), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    
-    # 关系
-    paper = relationship("Paper", back_populates="maybe_laters")
-    
-    def to_dict(self):
-        """转换为字典格式"""
-        return {
-            'id': self.id,
-            'paper_id': self.paper_id,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'paper': self.paper.to_dict() if self.paper else None
-        }
+# ORM 模型 `Favorite` 与 `MaybeLater` 已移除；用户状态统一存储在 `papers.user_status` 中。
 
 class SystemConfig(Base):
     """系统配置模型"""
