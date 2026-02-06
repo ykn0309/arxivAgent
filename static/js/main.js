@@ -972,12 +972,13 @@ class ArxivAgentApp {
 
     async cleanCache() {
         const select = document.getElementById('clean-cache-range');
-        const days = select ? parseInt(select.value, 10) : 30;
-        if (!confirm(`确定要清理 ${days} 天前的缓存吗？仅删除被标记为不喜欢的论文。`)) return;
+        const val = select ? select.value : '30';
+        const label = val === 'all' ? '全部' : `${val} 天前`;
+        if (!confirm(`确定要清理 ${label} 的缓存吗？仅删除被标记为不喜欢的论文。`)) return;
 
         try {
             utils.showLoading('清理中...');
-            const response = await api.cleanCache(days);
+            const response = await api.cleanCache(val);
             utils.hideLoading();
 
             if (response.success) {
