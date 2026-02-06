@@ -4,7 +4,7 @@ class ArxivAgentApp {
         this.currentTab = 'recommendation';
         this.currentListTab = 'favorites';
         this.currentPaper = null;
-        this.cacheQueue = [];
+        this.recommendationQueue = [];
         this.init();
     }
 
@@ -68,23 +68,6 @@ class ArxivAgentApp {
             this.saveFavoriteSummary();
         });
 
-        // 缓存设置保存按钮
-        const cacheForm = document.getElementById('cache-size-form');
-        if (cacheForm) {
-            cacheForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const n = parseInt(document.getElementById('cache-size').value || 0, 10);
-                try {
-                    await api.updateCacheSize(n);
-                    utils.showNotification('缓存大小已保存', 'success');
-                    // 重新预加载缓存
-                    await this.warmCache();
-                } catch (err) {
-                    utils.showNotification('保存缓存大小失败: ' + err.message, 'error');
-                }
-            });
-        }
-
         // 维护按钮
         document.getElementById('crawl-now-btn').addEventListener('click', () => {
             this.crawlNow();
@@ -124,25 +107,21 @@ class ArxivAgentApp {
         await this.loadConfigStatus();
         await this.loadSettingsData();
         await this.loadRecommendationStatus();
-        // 预加载缓存（若设置了缓存大小），再加载首条推荐
-        await this.warmCache();
+        // 预取两条推荐以改善切换体验
+        await this.prefetchNextRecommendation();
+        await this.prefetchNextRecommendation();
         this.loadNextRecommendation();
     }
 
-    async warmCache() {
+    async prefetchNextRecommendation() {
         try {
-            const resp = await api.getCacheSize();
+            const resp = await api.getNextRecommendation();
             if (resp && resp.success && resp.data) {
-                const n = resp.data.cache_size || 0;
-                if (n > 0) {
-                    const preload = await api.preloadRecommendations(n);
-                    if (preload && preload.success && preload.data && Array.isArray(preload.data.papers)) {
-                        this.cacheQueue = preload.data.papers.slice();
-                    }
-                }
+                // push 到队列尾部
+                this.recommendationQueue.push(resp.data);
             }
         } catch (e) {
-            console.error('预加载缓存失败:', e);
+            console.warn('预取推荐失败:', e);
         }
     }
 
@@ -229,21 +208,8 @@ class ArxivAgentApp {
             this.loadLLMConfig(),
             this.loadUserInterests(),
             this.loadCategories(),
-            this.loadFavoriteSummary(),
-            this.loadCacheSize()
+            this.loadFavoriteSummary()
         ]);
-    }
-
-    async loadCacheSize() {
-        try {
-            const resp = await api.getCacheSize();
-            if (resp && resp.success && resp.data) {
-                const el = document.getElementById('cache-size');
-                if (el) el.value = resp.data.cache_size || '';
-            }
-        } catch (e) {
-            console.error('加载缓存大小失败:', e);
-        }
     }
 
     async loadLLMConfig() {
@@ -388,21 +354,21 @@ class ArxivAgentApp {
         const contentEl = document.getElementById('card-content');
         const emptyEl = document.getElementById('card-empty');
 
+        // 如果队列中已有预取项，立即显示队列头，减少等待
+        if (this.recommendationQueue.length > 0) {
+            const next = this.recommendationQueue.shift();
+            this.currentPaper = next;
+            this.displayPaperCard(next);
+            loadingEl.style.display = 'none';
+            contentEl.style.display = 'flex';
+            // 异步补充队列
+            this.prefetchNextRecommendation();
+            return;
+        }
+
         loadingEl.style.display = 'flex';
         contentEl.style.display = 'none';
         emptyEl.style.display = 'none';
-
-        // 优先从预加载队列中取出
-        if (this.cacheQueue && this.cacheQueue.length > 0) {
-            const paper = this.cacheQueue.shift();
-            this.currentPaper = paper;
-            this.displayPaperCard(paper);
-            loadingEl.style.display = 'none';
-            contentEl.style.display = 'flex';
-            // 异步补充缓存（如果还设置了缓存大小）
-            (async () => { try { await this.warmCache(); } catch(e){} })();
-            return;
-        }
 
         try {
             const response = await api.getNextRecommendation();
@@ -527,10 +493,19 @@ class ArxivAgentApp {
             
             utils.hideLoading();
             utils.showNotification('反馈已处理', 'success');
-            
-            // 加载下一个推荐
-            this.loadNextRecommendation();
-            // 刷新剩余计数
+            // 立即展示预取项（如果有），提升用户体验
+            if (this.recommendationQueue.length > 0) {
+                const next = this.recommendationQueue.shift();
+                this.currentPaper = next;
+                this.displayPaperCard(next);
+                // 异步补充队列
+                this.prefetchNextRecommendation();
+            } else {
+                // 回退到正常加载流程
+                this.loadNextRecommendation();
+            }
+
+            // 刷新剩余计数（后台进行）
             this.loadRecommendationStatus();
             
         } catch (error) {
@@ -609,12 +584,12 @@ class ArxivAgentApp {
             paperElement.className = 'paper-item';
             
             // 使用正确的 id 字段：
-            // - 收藏列表包含 `favorite_id` 和 `paper_id`
-            // - 稍后再说列表包含 `maybe_later_id` 和 `paper_id`
+            // - 列表接口现在统一返回 `paper.id`，前端应使用 `paper.id` 作为唯一标识
+            // - 后端通过 `papers.user_status` 字段区分 'favorite' / 'maybe_later' 等状态
             const actionsHtml = isMaybeLater ? 
-                `<button class="item-action-btn move-btn" data-paper-id="${paper.paper_id}">移到收藏</button>
-                 <button class="item-action-btn delete-btn" data-maybe-id="${paper.maybe_later_id}">删除</button>` :
-                `<button class="item-action-btn delete-btn" data-favorite-id="${paper.favorite_id}">删除</button>`;
+                `<button class="item-action-btn move-btn" data-paper-id="${paper.id}">移到收藏</button>
+                 <button class="item-action-btn delete-btn" data-paper-id="${paper.id}">删除</button>` :
+                `<button class="item-action-btn delete-btn" data-paper-id="${paper.id}">删除</button>`;
 
             // 解析categories
             let categories = [];
@@ -651,13 +626,10 @@ class ArxivAgentApp {
             // 绑定操作按钮事件
             paperElement.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    // 优先读取专用 dataset 字段
-                    const favoriteId = e.target.dataset.favoriteId;
-                    const maybeId = e.target.dataset.maybeId;
-                    if (maybeId) {
-                        this.deleteMaybeLater(maybeId);
-                    } else if (favoriteId) {
-                        this.deleteFavorite(favoriteId);
+                    const paperId = e.target.dataset.paperId;
+                    if (paperId) {
+                        if (isMaybeLater) this.deleteMaybeLater(paperId);
+                        else this.deleteFavorite(paperId);
                     } else {
                         console.warn('未找到有效的删除 ID');
                     }

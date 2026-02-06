@@ -74,16 +74,21 @@ class RecommendationService:
     def process_user_feedback(self, paper_id: int, action: str, user_note: str = None):
         """处理用户反馈"""
         if action == 'favorite':
-            # 添加到收藏
-            self.db.add_favorite(paper_id, user_note)
+            # 标记为收藏
+            self.db.set_user_status(paper_id, 'favorite')
+            # 记录用户笔记（历史上使用独立的 `favorites` 表；当前实现将用户标记合并到
+            # `papers.user_status`，用户笔记可扩展存放在 `papers` 表的相应字段）
         elif action == 'maybe_later':
-            # 添加到稍后再说
-            self.db.add_maybe_later(paper_id)
-        # 如果是不喜欢，则不做额外处理，论文已被标记为已评估
+            # 标记为稍后再说
+            self.db.set_user_status(paper_id, 'maybe_later')
+        elif action == 'dislike':
+            # 标记为不喜欢
+            self.db.set_user_status(paper_id, 'dislike')
+        # 其它情况（例如 'none'）可不做处理
     
     def _trigger_incremental_summary(self):
         """触发增量总结"""
-        # 获取未总结的收藏论文
+        # 获取未总结的收藏论文（基于 `papers.user_status = 'favorite'`）
         unsummarized = self.db.get_unsummarized_favorites()
         
         if not unsummarized:
@@ -117,49 +122,14 @@ class RecommendationService:
     def get_favorites_list(self, page: int = 1, per_page: int = 10) -> Dict:
         """获取收藏列表（分页）"""
         offset = (page - 1) * per_page
-        
-        query = '''
-            SELECT 
-                f.id as favorite_id,
-                f.paper_id,
-                f.user_note,
-                f.is_summarized,
-                f.created_at as favorite_created_at,
-                p.id,
-                p.arxiv_id,
-                p.title,
-                p.abstract,
-                p.authors,
-                p.categories,
-                p.published_date,
-                p.updated_date,
-                p.pdf_url,
-                p.arxiv_url,
-                p.is_recommended,
-                p.llm_evaluated,
-                p.recommendation_reason,
-                p.chinese_title,
-                p.chinese_abstract,
-                p.created_at
-            FROM favorites f
-            JOIN papers p ON f.paper_id = p.id
-            ORDER BY f.created_at DESC
-            LIMIT ? OFFSET ?
-        '''
-        
-        papers = self.db.execute_query(query, (per_page, offset))
-        
-        # 获取总数
-        count_query = '''
-            SELECT COUNT(*) as total 
-            FROM favorites f
-            JOIN papers p ON f.paper_id = p.id
-        '''
+        rows = self.db.get_papers_by_user_status('favorite', limit=per_page, offset=offset)
+        # count total
+        count_query = "SELECT COUNT(*) as total FROM papers WHERE user_status = 'favorite'"
         total_result = self.db.execute_query(count_query)
         total = total_result[0]['total'] if total_result else 0
-        
+
         return {
-            'papers': [dict(row) for row in papers],
+            'papers': [dict(row) for row in rows],
             'pagination': {
                 'page': page,
                 'per_page': per_page,
@@ -170,97 +140,21 @@ class RecommendationService:
 
     def get_pending_count(self) -> int:
         """返回待评估（未由LLM评估且未标记为推荐）的论文数量"""
-        query = """
-            SELECT COUNT(*) as total
-            FROM papers
-            WHERE llm_evaluated = FALSE AND is_recommended = FALSE
-        """
+        # 统计尚未由 LLM 评估的论文数量
+        query = "SELECT COUNT(*) as total FROM papers WHERE llm_evaluated = FALSE"
         result = self.db.execute_query(query)
         return result[0]['total'] if result else 0
-
-    def pre_evaluate_papers(self, count: int = 5):
-        """对未评估的论文批量调用LLM进行评估并保存结果，返回评估后的论文列表"""
-        papers = self.db.get_papers_for_recommendation(limit=count)
-        evaluated = []
-
-        for row in papers:
-            paper = dict(row)
-            try:
-                user_interests = self.db.get_config('USER_INTERESTS', '')
-                favorite_summary = self.db.get_config('FAVORITE_SUMMARY', '')
-
-                eval_result = self.llm_service.evaluate_paper(paper, user_interests, favorite_summary)
-                is_recommended = eval_result.get('is_recommended', False)
-                reason = eval_result.get('reason', '')
-
-                # 更新评估状态和推荐理由
-                self.db.update_paper_evaluation(paper['id'], is_recommended, recommendation_reason=reason)
-
-                chinese_title = ''
-                chinese_abstract = ''
-                if is_recommended:
-                    try:
-                        translation = self.llm_service.translate_paper_info(paper['title'], paper['abstract'])
-                        chinese_title = translation.get('chinese_title', '')
-                        chinese_abstract = translation.get('chinese_abstract', '')
-                        self.db.update_paper_translation(paper['id'], chinese_title, chinese_abstract)
-                    except Exception as e:
-                        print(f"翻译论文时出错: {e}")
-
-                paper['recommendation_reason'] = reason
-                paper['chinese_title'] = chinese_title
-                paper['chinese_abstract'] = chinese_abstract
-                evaluated.append(paper)
-            except Exception as e:
-                print(f"预评估论文时出错 (id={paper.get('id')}): {e}")
-                continue
-
-        return evaluated
     
     def get_maybe_later_list(self, page: int = 1, per_page: int = 10) -> Dict:
         """获取稍后再说列表（分页）"""
         offset = (page - 1) * per_page
-        
-        query = '''
-            SELECT 
-                ml.id as maybe_later_id,
-                ml.paper_id,
-                ml.created_at as maybe_later_created_at,
-                p.id,
-                p.arxiv_id,
-                p.title,
-                p.abstract,
-                p.authors,
-                p.categories,
-                p.published_date,
-                p.updated_date,
-                p.pdf_url,
-                p.arxiv_url,
-                p.is_recommended,
-                p.llm_evaluated,
-                p.recommendation_reason,
-                p.chinese_title,
-                p.chinese_abstract,
-                p.created_at
-            FROM maybe_later ml
-            JOIN papers p ON ml.paper_id = p.id
-            ORDER BY ml.created_at DESC
-            LIMIT ? OFFSET ?
-        '''
-        
-        papers = self.db.execute_query(query, (per_page, offset))
-        
-        # 获取总数
-        count_query = '''
-            SELECT COUNT(*) as total 
-            FROM maybe_later ml
-            JOIN papers p ON ml.paper_id = p.id
-        '''
+        rows = self.db.get_papers_by_user_status('maybe_later', limit=per_page, offset=offset)
+        count_query = "SELECT COUNT(*) as total FROM papers WHERE user_status = 'maybe_later'"
         total_result = self.db.execute_query(count_query)
         total = total_result[0]['total'] if total_result else 0
-        
+
         return {
-            'papers': [dict(row) for row in papers],
+            'papers': [dict(row) for row in rows],
             'pagination': {
                 'page': page,
                 'per_page': per_page,
@@ -271,24 +165,23 @@ class RecommendationService:
     
     def move_from_maybe_to_favorite(self, paper_id: int, user_note: str = None):
         """将论文从稍后再说移动到收藏"""
-        # 删除稍后再说记录
-        delete_query = 'DELETE FROM maybe_later WHERE paper_id = ?'
-        self.db.execute_query(delete_query, (paper_id,))
-        
-        # 添加到收藏
-        self.db.add_favorite(paper_id, user_note)
+        # 直接将用户状态改为 favorite
+        self.db.set_user_status(paper_id, 'favorite')
         
         # 触发增量总结
         self._trigger_incremental_summary()
     
     def delete_favorite(self, favorite_id: int):
-        """删除收藏"""
-        query = 'DELETE FROM favorites WHERE id = ?'
+        """删除收藏（兼容旧接口）"""
+        # 旧模型的 `favorite_id` 指向 `favorites.id`；新接口以 `paper_id` 表示论文。
+        # 这里假设传入的是 `paper_id` 并将其状态重置为 'none'。
+        query = "UPDATE papers SET user_status = 'none' WHERE id = ?"
         return self.db.execute_query(query, (favorite_id,))
     
     def delete_maybe_later(self, maybe_later_id: int):
         """删除稍后再说"""
-        query = 'DELETE FROM maybe_later WHERE id = ?'
+        # assume maybe_later_id is paper_id
+        query = "UPDATE papers SET user_status = 'none' WHERE id = ?"
         return self.db.execute_query(query, (maybe_later_id,))
     
     def clean_old_papers(self, days_old: int = 30):
@@ -297,14 +190,10 @@ class RecommendationService:
         
         cutoff_date = (datetime.now() - timedelta(days=days_old)).strftime('%Y-%m-%d')
         
-        # 获取要保留的论文ID
-        protected_papers_query = '''
-            SELECT DISTINCT paper_id FROM favorites
-            UNION
-            SELECT DISTINCT paper_id FROM maybe_later
-        '''
-        protected_result = self.db.execute_query(protected_papers_query)
-        protected_ids = [str(row['paper_id']) for row in protected_result]
+        # 获取要保留的论文ID：user_status in ('favorite','maybe_later')
+        protected_query = "SELECT id FROM papers WHERE user_status IN ('favorite','maybe_later')"
+        protected_result = self.db.execute_query(protected_query)
+        protected_ids = [str(row['id']) for row in protected_result]
         
         if protected_ids:
             # 删除不在保护列表中的旧论文
