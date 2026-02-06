@@ -151,7 +151,10 @@ class DatabaseManager:
             conn.close()
     
     def insert_paper(self, paper_data):
-        """插入论文数据"""
+        """插入论文数据。
+
+        返回值：插入的行数（1 表示插入成功，0 表示由于 arxiv_id 已存在而被忽略）。
+        """
         query = '''
             INSERT OR IGNORE INTO papers 
             (arxiv_id, title, abstract, authors, categories, published_date, updated_date, pdf_url, arxiv_url)
@@ -168,7 +171,15 @@ class DatabaseManager:
             paper_data.get('pdf_url'),
             paper_data.get('arxiv_url')
         )
-        return self.execute_query(query, params)
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute(query, params)
+            conn.commit()
+            # cursor.rowcount 在 INSERT OR IGNORE 的情况下会反映是否插入（1 或 0）
+            return cursor.rowcount
+        finally:
+            conn.close()
 
     # 新的状态操作方法（将 favorite / maybe_later / disliked 状态保存在 papers 表）
     def mark_favorite(self, paper_id, user_note=None):

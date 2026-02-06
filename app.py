@@ -279,6 +279,157 @@ def get_favorites():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# === 管理接口：论文管理（在列表页） ===
+@app.route('/api/admin/last-crawl')
+def admin_last_crawl():
+    try:
+        last = db.get_config('LAST_CRAWL_DATE', '')
+        return jsonify({'success': True, 'data': {'last_crawl_date': last}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/set-last-crawl-date', methods=['POST'])
+def admin_set_last_crawl():
+    try:
+        data = request.get_json() or {}
+        date = data.get('date')
+        if not date:
+            return jsonify({'success': False, 'error': '缺少日期'}), 400
+        db.set_config('LAST_CRAWL_DATE', date)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/crawl-now', methods=['POST'])
+def admin_crawl_now():
+    try:
+        data = request.get_json() or {}
+        categories = data.get('categories')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        count = arxiv_service.crawl_recent_papers(force_categories=categories, start_date=start_date, end_date=end_date)
+        return jsonify({'success': True, 'message': f'成功爬取 {count} 篇论文', 'data': {'count': count}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/papers')
+def admin_get_papers():
+    try:
+        status = request.args.get('status', 'all')
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+        offset = (page - 1) * per_page
+
+        base_query = 'SELECT *, id as paper_id FROM papers'
+        where_clauses = []
+        params = []
+
+        if status == 'unassessed':
+            where_clauses.append('llm_evaluated = 0')
+        elif status == 'assessed':
+            where_clauses.append('llm_evaluated = 1')
+        elif status == 'unread':
+            # 已被LLM评估且被LLM推荐，但用户尚未对其进行任何标记（未收藏/未稍后/未标记为不喜欢）
+            where_clauses.append('(llm_evaluated = 1 AND is_recommended = 1 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0) AND (disliked IS NULL OR disliked = 0))')
+        elif status == 'favorite':
+            where_clauses.append('favorite = 1')
+        elif status == 'disliked':
+            where_clauses.append('disliked = 1')
+        elif status == 'maybe_later':
+            where_clauses.append('maybe_later = 1')
+
+        where_sql = (' WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
+
+        query = f"{base_query} {where_sql} ORDER BY published_date DESC LIMIT ? OFFSET ?"
+        params.extend([per_page, offset])
+        rows = db.execute_query(query, params)
+
+        # total
+        count_query = f"SELECT COUNT(*) as total FROM papers {where_sql}"
+        total_res = db.execute_query(count_query)
+        total = total_res[0]['total'] if total_res else 0
+
+        return jsonify({'success': True, 'data': {'papers': [dict(r) for r in rows], 'pagination': {'page': page, 'per_page': per_page, 'total': total}}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/delete-unassessed', methods=['POST'])
+def admin_delete_unassessed():
+    try:
+        # 删除未评估且非收藏/非稍后标记的论文
+        query = "DELETE FROM papers WHERE llm_evaluated = 0 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0)"
+        res = db.execute_query(query)
+        return jsonify({'success': True, 'data': {'deleted': res}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/delete-disliked', methods=['POST'])
+def admin_delete_disliked():
+    try:
+        # 删除所有被标记为不喜欢的论文
+        query = "DELETE FROM papers WHERE disliked = 1"
+        res = db.execute_query(query)
+        return jsonify({'success': True, 'data': {'deleted': res}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/mark-assessed-unseen-disliked', methods=['POST'])
+def admin_mark_assessed_unseen_disliked():
+    try:
+        # 仅把已由LLM评估且被LLM推荐，但用户未标记（未收藏/未稍后/未不喜欢）的论文标记为不喜欢
+        query = "UPDATE papers SET disliked = 1 WHERE llm_evaluated = 1 AND is_recommended = 1 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0) AND (disliked IS NULL OR disliked = 0)"
+        res = db.execute_query(query)
+        return jsonify({'success': True, 'data': {'updated': res}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/bulk-update', methods=['POST'])
+def admin_bulk_update():
+    try:
+        data = request.get_json() or {}
+        ids = data.get('paper_ids', [])
+        action = data.get('action')
+        if not ids or not action:
+            return jsonify({'success': False, 'error': '缺少参数'}), 400
+
+        for pid in ids:
+            if action == 'favorite':
+                db.mark_favorite(pid)
+            elif action == 'unfavorite':
+                db.unmark_favorite(pid)
+            elif action == 'maybe_later':
+                db.mark_maybe_later(pid)
+            elif action == 'unmaybe':
+                db.unmark_maybe_later(pid)
+            elif action == 'dislike':
+                db.mark_disliked(pid)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/bulk-delete', methods=['POST'])
+def admin_bulk_delete():
+    try:
+        data = request.get_json() or {}
+        ids = data.get('paper_ids', [])
+        if not ids:
+            return jsonify({'success': False, 'error': '缺少参数'}), 400
+        placeholders = ','.join(['?'] * len(ids))
+        query = f'DELETE FROM papers WHERE id IN ({placeholders})'
+        res = db.execute_query(query, ids)
+        return jsonify({'success': True, 'data': {'deleted': res}})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/recommendation/status')
 def recommendation_status():
     """获取推荐进度状态：待评估论文数量"""

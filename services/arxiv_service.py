@@ -126,14 +126,14 @@ class ArxivService:
             last_crawl_date_str = self.db.get_config('LAST_CRAWL_DATE')
 
             if last_crawl_date_str:
-                # 非初次使用：从上次爬取日期的后一天开始
+                # 如果存在上次抓取日期：从该日期（包含）开始，直到今天（包含）
                 last_crawl_date = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
-                start_dt = last_crawl_date + timedelta(days=1)
-                end_dt = datetime.now() - timedelta(days=1)
+                start_dt = last_crawl_date
+                end_dt = datetime.now()
             else:
-                # 初次使用：爬取最近7天（不含今天）
-                end_dt = datetime.now() - timedelta(days=1)
-                start_dt = datetime.now() - timedelta(days=8)
+                # 初次使用：抓取最近7天（包含今天）
+                end_dt = datetime.now()
+                start_dt = datetime.now() - timedelta(days=6)
 
         # 如果计算得到的起始日期晚于结束日期，调整为相同日期（避免反向区间）
         if start_dt > end_dt:
@@ -153,8 +153,11 @@ class ArxivService:
         saved_count = 0
         for paper in papers:
             result = self.db.insert_paper(paper)
-            if result:
-                saved_count += 1
+            try:
+                saved_count += int(result)
+            except Exception:
+                if result:
+                    saved_count += 1
         
         # 更新最后爬取日期
         today_str = datetime.now().strftime('%Y-%m-%d')

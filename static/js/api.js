@@ -119,6 +119,55 @@ class APIClient {
         return this.request(`/list/favorites?page=${page}&per_page=${perPage}`);
     }
 
+    // 管理接口：获取所有论文（支持状态过滤）
+    async getAdminPapers(status = 'all', page = 1, perPage = 50) {
+        return this.request(`/admin/papers?status=${status}&page=${page}&per_page=${perPage}`);
+    }
+
+    async getLastCrawlDate() {
+        return this.request('/admin/last-crawl');
+    }
+
+    async setLastCrawlDate(date) {
+        return this.request('/admin/set-last-crawl-date', {
+            method: 'POST',
+            body: { date }
+        });
+    }
+
+    async adminCrawlNow(body = {}) {
+        return this.request('/admin/crawl-now', {
+            method: 'POST',
+            body
+        });
+    }
+
+    async deleteUnassessed() {
+        return this.request('/admin/delete-unassessed', { method: 'POST' });
+    }
+
+    async deleteDisliked() {
+        return this.request('/admin/delete-disliked', { method: 'POST' });
+    }
+
+    async markAssessedUnseenDisliked() {
+        return this.request('/admin/mark-assessed-unseen-disliked', { method: 'POST' });
+    }
+
+    async bulkUpdate(paperIds = [], action) {
+        return this.request('/admin/bulk-update', {
+            method: 'POST',
+            body: { paper_ids: paperIds, action }
+        });
+    }
+
+    async bulkDelete(paperIds = []) {
+        return this.request('/admin/bulk-delete', {
+            method: 'POST',
+            body: { paper_ids: paperIds }
+        });
+    }
+
     async getMaybeLater(page = 1, perPage = 10) {
         return this.request(`/list/maybe-later?page=${page}&per_page=${perPage}`);
     }

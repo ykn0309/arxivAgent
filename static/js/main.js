@@ -3,6 +3,7 @@ class ArxivAgentApp {
     constructor() {
         this.currentTab = 'recommendation';
         this.currentListTab = 'favorites';
+        this.adminPage = 1;
         this.currentPaper = null;
         this._statusInterval = null;
         this.init();
@@ -10,7 +11,16 @@ class ArxivAgentApp {
 
     init() {
         this.bindEvents();
+        this._bindAdminEvents();
+        // 初始化列表子标签的激活状态（确保默认选中收藏）
+        document.querySelectorAll('.list-tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.list === this.currentListTab);
+        });
+        document.querySelectorAll('.list-content').forEach(content => {
+            content.classList.toggle('active', content.id === `${this.currentListTab}-list`);
+        });
         this.loadInitialData();
+        this.loadAdminPanel();
         // 每 30 秒刷新一次推荐进度（仅数字），不刷新推荐卡片
         this._statusInterval = setInterval(() => this.loadRecommendationStatus(), 30000);
     }
@@ -78,14 +88,12 @@ class ArxivAgentApp {
             this.saveFavoriteSummary();
         });
 
-        // 维护按钮
-        document.getElementById('crawl-now-btn').addEventListener('click', () => {
-            this.crawlNow();
-        });
+        // 维护按钮（存在检查以防在某些视图中被移除）
+        const crawlNowBtn = document.getElementById('crawl-now-btn');
+        if (crawlNowBtn) crawlNowBtn.addEventListener('click', () => { this.crawlNow(); });
 
-        document.getElementById('clean-cache-btn').addEventListener('click', () => {
-            this.cleanCache();
-        });
+        const cleanCacheBtn = document.getElementById('clean-cache-btn');
+        if (cleanCacheBtn) cleanCacheBtn.addEventListener('click', () => { this.cleanCache(); });
 
         // 刷新推荐按钮
         document.getElementById('refresh-recommendation').addEventListener('click', () => {
@@ -124,10 +132,12 @@ class ArxivAgentApp {
         try {
             const resp = await api.getRecommendationStatus();
             if (resp.success && resp.data) {
-                const pending = resp.data.pending || 0;
                 const rec_unseen = resp.data.recommended_unseen || 0;
+                const pending = resp.data.pending || 0;
                 const el = document.getElementById('recommendation-remaining');
-                if (el) el.textContent = `${rec_unseen} / ${pending}`; // 已评估待看 / 待评估
+                const processingEl = document.getElementById('recommendation-processing');
+                if (el) el.textContent = `${rec_unseen}`; // 只显示已评估但未标记的数量
+                if (processingEl) processingEl.textContent = `${pending}`;
             }
         } catch (e) {
             console.error('加载推荐进度失败:', e);
@@ -498,8 +508,12 @@ class ArxivAgentApp {
     async loadListData() {
         if (this.currentListTab === 'favorites') {
             await this.loadFavorites();
-        } else {
+        } else if (this.currentListTab === 'maybe-later') {
             await this.loadMaybeLater();
+        } else if (this.currentListTab === 'library') {
+            // 加载管理面板数据并渲染论文库（所有论文）
+            await this.loadAdminPanel();
+            await this.loadAdminPapers(1);
         }
     }
 
@@ -1009,6 +1023,205 @@ class ArxivAgentApp {
         } catch (error) {
             utils.hideLoading();
             utils.showNotification('清理失败: ' + error.message, 'error');
+        }
+    }
+
+    // 管理界面：加载 admin 面板数据（上次抓取时间）
+    async loadAdminPanel() {
+        try {
+            const resp = await api.getLastCrawlDate();
+            if (resp.success) {
+                const date = resp.data.last_crawl_date || '';
+                const input = document.getElementById('admin-last-crawl-date');
+                if (input) input.value = date;
+            }
+        } catch (e) {
+            console.error('加载 admin 面板失败', e);
+        }
+    }
+
+    // 管理界面：加载论文列表
+    async loadAdminPapers(page = 1) {
+        // 恢复分页：每页请求一定数量，默认 50
+        const perPage = 50;
+        this.adminPage = page || 1;
+        try {
+            const statusEl = document.getElementById('admin-filter-status');
+            const status = statusEl ? statusEl.value : 'all';
+            const resp = await api.getAdminPapers(status, this.adminPage, perPage);
+            if (resp.success) {
+                const papers = resp.data.papers || [];
+                const rawPag = resp.data.pagination || {};
+                const pageNum = rawPag.page || this.adminPage;
+                const per = rawPag.per_page || perPage;
+                const total = rawPag.total != null ? rawPag.total : (papers.length || 0);
+                const pages = Math.max(1, Math.ceil(total / per));
+                const pagination = { page: pageNum, per_page: per, total: total, pages: pages };
+                this.renderAdminPapers(papers, pagination);
+            }
+        } catch (e) {
+            utils.showNotification('加载论文列表失败: ' + e.message, 'error');
+        }
+    }
+
+    renderAdminPapers(papers, pagination = { page: 1, pages: 1 }) {
+        const container = document.getElementById('admin-papers-table');
+        if (!container) return;
+
+        let html = '<table class="admin-table">';
+        // 列宽使用 colgroup：checkbox 固定、状态/发布日期固定，标题列自适应剩余空间
+        html += '<colgroup><col style="width:40px"><col><col style="width:130px"><col style="width:130px"></colgroup>';
+        html += '<thead><tr><th></th><th>标题</th><th>状态</th><th>发布日期</th></tr></thead><tbody>';
+        for (const p of papers) {
+            const status = this._paperStatus(p);
+            const title = p.title || '';
+            const date = p.published_date || '';
+            const escTitle = this._escapeHtml(title);
+            html += `<tr data-id="${p.paper_id}"><td><input type="checkbox" class="admin-select" data-id="${p.paper_id}"></td><td><div class="admin-title" title="${escTitle}">${escTitle}</div></td><td class="col-status">${status}</td><td class="col-date">${date}</td></tr>`;
+        }
+        html += '</tbody></table>';
+
+        // 分页控件
+        html += `<div class="admin-pagination" id="admin-pagination">`;
+        html += `<button class="pagination-btn" id="admin-prev" ${pagination.page <= 1 ? 'disabled' : ''}>上一页</button>`;
+        html += `<span class="page-info">第 ${pagination.page} 页，共 ${pagination.pages} 页</span>`;
+        html += `<button class="pagination-btn" id="admin-next" ${pagination.page >= pagination.pages ? 'disabled' : ''}>下一页</button>`;
+        html += `</div>`;
+
+        container.innerHTML = html;
+
+        const selectAll = document.getElementById('admin-select-all');
+        if (selectAll) {
+            selectAll.checked = false;
+            // 只选择当前页面上的复选框（覆盖旧的处理器以避免重复绑定）
+            selectAll.onchange = (e) => {
+                container.querySelectorAll('.admin-select').forEach(cb => cb.checked = e.target.checked);
+            };
+        }
+
+        // 绑定分页事件
+        const prev = document.getElementById('admin-prev');
+        const next = document.getElementById('admin-next');
+        if (prev) prev.addEventListener('click', () => { if (pagination.page > 1) this.loadAdminPapers(pagination.page - 1); });
+        if (next) next.addEventListener('click', () => { if (pagination.page < pagination.pages) this.loadAdminPapers(pagination.page + 1); });
+    }
+
+    _paperStatus(p) {
+        if (p.favorite == 1) return '喜欢';
+        if (p.maybe_later == 1) return '稍后再说';
+        if (p.disliked == 1) return '不喜欢';
+        if (p.llm_evaluated == 1) return '已评估';
+        return '未评估';
+    }
+
+    _escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    _getSelectedAdminPaperIds() {
+        const ids = [];
+        document.querySelectorAll('.admin-select:checked').forEach(cb => ids.push(parseInt(cb.dataset.id)));
+        return ids;
+    }
+
+    // 绑定管理面板事件（在 init 之后调用）
+    _bindAdminEvents() {
+        const refreshBtn = document.getElementById('admin-refresh-list');
+        if (refreshBtn) refreshBtn.addEventListener('click', () => this.loadAdminPapers(this.adminPage));
+
+        const filterSelect = document.getElementById('admin-filter-status');
+        if (filterSelect) filterSelect.addEventListener('change', () => { this.adminPage = 1; this.loadAdminPapers(1); });
+
+        const crawlBtn = document.getElementById('admin-crawl-now');
+        if (crawlBtn) crawlBtn.addEventListener('click', () => this.adminCrawlNow());
+
+        const setLastBtn = document.getElementById('admin-set-last-crawl');
+        if (setLastBtn) setLastBtn.addEventListener('click', async () => {
+            const input = document.getElementById('admin-last-crawl-date');
+            if (!input || !input.value) return utils.showNotification('请选择日期', 'error');
+            try {
+                await api.setLastCrawlDate(input.value);
+                utils.showNotification('更新成功', 'success');
+            } catch (e) { utils.showNotification('更新失败: ' + e.message, 'error'); }
+        });
+
+        const delUnassessed = document.getElementById('admin-delete-unassessed');
+        if (delUnassessed) delUnassessed.addEventListener('click', async () => {
+            if (!confirm('确定删除所有未评估且未被收藏/未被标记为稍后再说的论文吗？')) return;
+            try {
+                const resp = await api.deleteUnassessed();
+                if (resp.success) utils.showNotification('已删除', 'success');
+                this.loadAdminPapers(this.adminPage);
+            } catch (e) { utils.showNotification('操作失败: ' + e.message, 'error'); }
+        });
+
+        const markDisliked = document.getElementById('admin-mark-assessed-unseen-disliked');
+        if (markDisliked) markDisliked.addEventListener('click', async () => {
+            if (!confirm('将所有已评估但未被标记的论文标记为不喜欢？')) return;
+            try {
+                const resp = await api.markAssessedUnseenDisliked();
+                if (resp.success) utils.showNotification('已标记', 'success');
+                this.loadAdminPapers(this.adminPage);
+            } catch (e) { utils.showNotification('操作失败: ' + e.message, 'error'); }
+        });
+
+        const delDislikedAll = document.getElementById('admin-delete-disliked');
+        if (delDislikedAll) delDislikedAll.addEventListener('click', async () => {
+            if (!confirm('确定删除所有已标记为不喜欢的论文吗？该操作不可恢复。')) return;
+            try {
+                const resp = await api.deleteDisliked();
+                if (resp.success) utils.showNotification('已删除所有不喜欢的论文', 'success');
+                this.loadAdminPapers(this.adminPage);
+            } catch (e) { utils.showNotification('操作失败: ' + e.message, 'error'); }
+        });
+
+        const bulkFavorite = document.getElementById('admin-bulk-favorite');
+        if (bulkFavorite) bulkFavorite.addEventListener('click', async () => {
+            const ids = this._getSelectedAdminPaperIds(); if (!ids.length) return utils.showNotification('未选择任何论文', 'warning');
+            try { await api.bulkUpdate(ids, 'favorite'); utils.showNotification('已标记为喜欢', 'success'); this.loadAdminPapers(this.adminPage); } catch (e) { utils.showNotification('失败: ' + e.message, 'error'); }
+        });
+
+        const bulkMaybe = document.getElementById('admin-bulk-maybe');
+        if (bulkMaybe) bulkMaybe.addEventListener('click', async () => {
+            const ids = this._getSelectedAdminPaperIds(); if (!ids.length) return utils.showNotification('未选择任何论文', 'warning');
+            try { await api.bulkUpdate(ids, 'maybe_later'); utils.showNotification('已标记为稍后再说', 'success'); this.loadAdminPapers(this.adminPage); } catch (e) { utils.showNotification('失败: ' + e.message, 'error'); }
+        });
+
+        const bulkDislike = document.getElementById('admin-bulk-dislike');
+        if (bulkDislike) bulkDislike.addEventListener('click', async () => {
+            const ids = this._getSelectedAdminPaperIds(); if (!ids.length) return utils.showNotification('未选择任何论文', 'warning');
+            try { await api.bulkUpdate(ids, 'dislike'); utils.showNotification('已标记为不喜欢', 'success'); this.loadAdminPapers(this.adminPage); } catch (e) { utils.showNotification('失败: ' + e.message, 'error'); }
+        });
+
+        const bulkDelete = document.getElementById('admin-bulk-delete');
+        if (bulkDelete) bulkDelete.addEventListener('click', async () => {
+            const ids = this._getSelectedAdminPaperIds(); if (!ids.length) return utils.showNotification('未选择任何论文', 'warning');
+            if (!confirm('确定批量删除所选论文吗？')) return;
+            try { await api.bulkDelete(ids); utils.showNotification('已删除', 'success'); this.loadAdminPapers(this.adminPage); } catch (e) { utils.showNotification('失败: ' + e.message, 'error'); }
+        });
+    }
+
+    // 管理页面调用爬取（使用 admin API）
+    async adminCrawlNow() {
+        if (!confirm('确定要立即爬取新论文吗？这可能需要一些时间。')) return;
+
+        try {
+            utils.showLoading('爬取中...');
+            const resp = await api.adminCrawlNow();
+            utils.hideLoading();
+            if (resp.success) {
+                utils.showNotification(resp.message || '已开始爬取', 'success');
+                this.loadAdminPanel();
+            }
+        } catch (e) {
+            utils.hideLoading();
+            utils.showNotification('爬取失败: ' + e.message, 'error');
         }
     }
 }

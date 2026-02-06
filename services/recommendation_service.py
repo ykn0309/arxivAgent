@@ -224,7 +224,8 @@ class RecommendationService:
         # 已评估且未被用户处理的推荐数量
         query = """
             SELECT COUNT(*) as total FROM papers
-            WHERE is_recommended = 1
+            WHERE llm_evaluated = 1
+            AND is_recommended = 1
             AND (favorite IS NULL OR favorite = 0)
             AND (maybe_later IS NULL OR maybe_later = 0)
             AND (disliked IS NULL OR disliked = 0)

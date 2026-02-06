@@ -125,7 +125,7 @@ body {
     border-radius: 15px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     width: 100%;
-    max-width: 800px;
+    max-width: 1100px;
     min-height: 600px;
     position: relative;
     overflow: hidden;
@@ -476,6 +476,104 @@ body {
     gap: 20px;
 }
 
+/* 管理面板样式调整 */
+.admin-list {
+    padding: 12px 0 0 0;
+}
+
+.admin-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.admin-actions input[type="checkbox"] {
+    transform: scale(1.05);
+    margin-right: 6px;
+}
+
+.admin-actions .primary-btn, .admin-actions .secondary-btn, .admin-actions .danger-btn {
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    border-radius: 8px;
+}
+
+/* 统一管理面板中控制按钮的尺寸，使各行按钮视觉一致 */
+.admin-controls .control-row button,
+.admin-controls .control-row .primary-btn,
+.admin-controls .control-row .secondary-btn,
+.admin-controls .control-row .danger-btn,
+.admin-controls .control-row .warning-btn {
+    padding: 12px 20px;
+    font-size: 1rem;
+    border-radius: 12px;
+}
+
+/* 提升批量操作区按钮的可点击性与一致性 */
+.admin-actions button {
+    padding: 10px 18px;
+    font-size: 1rem;
+    border-radius: 10px;
+}
+
+.admin-controls .control-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.admin-controls label { margin-right: 6px; font-weight:600; }
+
+/* 增大筛选下拉与日期输入尺寸 */
+.admin-controls select#admin-filter-status,
+.admin-controls input[type="date"]#admin-last-crawl-date {
+    padding: 10px 12px;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-table thead th {
+    text-align: left;
+    padding: 10px 8px;
+    color: #555;
+    border-bottom: 1px solid #eee;
+}
+
+.admin-table tbody td {
+    padding: 12px 8px;
+    border-bottom: 1px solid #fafafa;
+    vertical-align: middle;
+}
+
+.admin-table tbody tr:hover { background: #fbfbfe; }
+
+.admin-table { table-layout: fixed; width: 100%; }
+
+.admin-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 100%;
+}
+
+/* 小屏幕下允许标题换行并减少列固定宽度影响 */
+@media (max-width: 900px) {
+    .admin-table { table-layout: auto; }
+    .admin-title { white-space: normal; }
+}
+
+
 .paper-item {
     border: 1px solid #eee;
     border-radius: 10px;
@@ -746,6 +844,76 @@ body {
     padding: 20px;
     display: grid;
     gap: 15px;
+}
+
+/* 响应式调整 */
+@media (max-width: 1200px) {
+    .paper-card {
+        max-width: 1000px;
+    }
+}
+
+@media (max-width: 900px) {
+    .main-content {
+        padding: 18px;
+    }
+
+    .paper-card {
+        max-width: 95%;
+        min-height: auto;
+        border-radius: 12px;
+    }
+
+    .card-loading, .card-content, .card-empty {
+        padding: 20px;
+    }
+
+    .paper-title {
+        font-size: 1.4rem;
+    }
+
+    .paper-chinese-title {
+        font-size: 1.05rem;
+    }
+
+    .paper-actions {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .action-btn {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .papers-list {
+        grid-template-columns: 1fr;
+    }
+
+    .list-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .list-tab-btn {
+        padding: 12px;
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .nav-container { height: 60px; }
+    .nav-brand h1 { font-size: 1.4rem; }
+    .nav-progress { display:none; }
+
+    .paper-title { font-size: 1.2rem; }
+    .paper-abstract p, .paper-recommendation-reason p { font-size: 0.95rem; }
+    .paper-chinese-abstract p { font-size: 0.95rem; }
+
+    .pagination-controls { gap: 6px; }
+    .pagination-btn { padding: 6px 10px; }
 }
 
 .status-item {

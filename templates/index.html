@@ -19,82 +19,70 @@
                 <button class="nav-btn" data-tab="list">列表</button>
                 <button class="nav-btn" data-tab="settings">设置</button>
                 <div class="nav-progress" id="nav-progress">
-                    <span class="nav-progress-text">待评估:</span>
+                    <span class="nav-progress-text">未读:</span>
                     <span class="nav-progress-count" id="recommendation-remaining">—</span>
+                    <span class="nav-progress-text" style="margin-left:10px">正在处理:</span>
+                    <span class="nav-progress-count" id="recommendation-processing">—</span>
                 </div>
             </div>
         </div>
     </nav>
 
-    <!-- 主要内容区域 -->
     <main class="main-content">
         <!-- 推荐页面 -->
         <section id="recommendation-tab" class="tab-content active">
             <div class="recommendation-container">
-                <div class="paper-card" id="paper-card">
-                    <div class="card-loading" id="card-loading">
-                        <div class="loading-spinner"></div>
-                        <p>正在加载推荐...</p>
+                <div class="paper-card">
+                    <div id="card-loading" class="card-loading" style="display:flex;align-items:center;justify-content:center;padding:40px;">
+                    <div class="loading-spinner" style="width:40px;height:40px;border:4px solid #eee;border-top-color:#6b5bff;border-radius:50%;animation:spin 1s linear infinite;"></div>
                     </div>
-                    
-                    <div class="card-content" id="card-content" style="display: none;">
-                        <div class="paper-header">
-                            <h2 class="paper-title" id="paper-title"></h2>
-                            <h3 class="paper-chinese-title" id="paper-chinese-title"></h3>
-                            <div class="paper-categories" id="paper-categories"></div>
-                            <div class="paper-meta">
-                                <span class="paper-date" id="paper-published-date"></span>
-                            </div>
-                        </div>
-                        
-                        <div class="paper-authors" id="paper-authors"></div>
-                        
-                        <div class="paper-recommendation-reason">
-                            <h3>推荐理由</h3>
-                            <p id="paper-recommendation-reason"></p>
-                        </div>
-                        
-                        <div class="paper-abstract">
-                            <h3>Abstract</h3>
-                            <p id="paper-abstract"></p>
-                        </div>
-                        
-                        <div class="paper-chinese-abstract">
-                            <h3>中文摘要</h3>
-                            <p id="paper-chinese-abstract"></p>
-                        </div>
-                        
-                        <div class="paper-actions">
-                            <button class="action-btn dislike-btn" data-action="dislike">
-                                <span class="btn-icon">👎</span>
-                                不喜欢
-                            </button>
-                            <button class="action-btn maybe-btn" data-action="maybe_later">
-                                <span class="btn-icon">⏰</span>
-                                稍后再说
-                            </button>
-                            <button class="action-btn like-btn" data-action="favorite">
-                                <span class="btn-icon">👍</span>
-                                喜欢
-                            </button>
-                        </div>
-                        
-                        <div class="paper-links">
-                            <a href="#" class="paper-link" id="paper-arxiv-link" target="_blank">查看原文</a>
-                            <a href="#" class="paper-link" id="paper-pdf-link" target="_blank">下载PDF</a>
-                        </div>
+
+                    <div id="card-content" class="card-content" style="display:none;padding:24px;">
+                    <h2 id="paper-title" class="paper-title"></h2>
+                    <h3 id="paper-chinese-title" class="paper-chinese-title" style="display:none;color:#666;font-weight:600;"></h3>
+                    <div class="paper-detail-meta" style="margin:8px 0;color:#777;">
+                        <span id="paper-published-date"></span>
+                        <span id="paper-authors" style="margin-left:12px;"></span>
                     </div>
-                    
-                    <div class="card-empty" id="card-empty" style="display: none;">
-                        <div class="empty-icon">📚</div>
-                        <h3>暂无推荐论文</h3>
-                        <p>可能是以下原因：</p>
-                        <ul>
-                            <li>还没有配置好基本设置</li>
-                            <li>需要等待系统爬取更多论文</li>
-                            <li>所有论文都已评估完毕</li>
-                        </ul>
-                        <button class="primary-btn" id="refresh-recommendation">刷新试试</button>
+                    <div id="paper-categories" style="margin-bottom:12px;"></div>
+
+                    <div class="paper-recommendation-reason" style="margin:12px 0;">
+                        <h3>推荐理由</h3>
+                        <p id="paper-recommendation-reason"></p>
+                    </div>
+
+                    <div class="paper-abstract">
+                        <h3>Abstract</h3>
+                        <p id="paper-abstract"></p>
+                    </div>
+
+                    <div class="paper-chinese-abstract" style="margin-top:12px;">
+                        <h3>中文摘要</h3>
+                        <p id="paper-chinese-abstract"></p>
+                    </div>
+
+                    <div class="paper-actions" style="margin:18px 0;display:flex;gap:12px;">
+                        <button class="action-btn dislike-btn" data-action="dislike">👎 不喜欢</button>
+                        <button class="action-btn maybe-btn" data-action="maybe_later">⏰ 稍后再说</button>
+                        <button class="action-btn like-btn" data-action="favorite">👍 喜欢</button>
+                    </div>
+
+                    <div class="paper-links" style="margin-top:6px;">
+                        <a href="#" class="paper-link" id="paper-arxiv-link" target="_blank">查看原文</a>
+                        <a href="#" class="paper-link" id="paper-pdf-link" target="_blank" style="margin-left:12px;">下载PDF</a>
+                    </div>
+                    </div>
+
+                    <div class="card-empty" id="card-empty" style="display: none;padding:24px;text-align:center;">
+                    <div class="empty-icon" style="font-size:48px;margin-bottom:8px;">📚</div>
+                    <h3>暂无推荐论文</h3>
+                    <p>可能是以下原因：</p>
+                    <ul style="list-style:disc;margin-left:20px;text-align:left;display:inline-block;text-align:left;">
+                        <li>还没有配置好基本设置</li>
+                        <li>需要等待系统爬取更多论文</li>
+                        <li>所有论文都已评估完毕</li>
+                    </ul>
+                    <div style="margin-top:12px;"><button class="primary-btn" id="refresh-recommendation">刷新试试</button></div>
                     </div>
                 </div>
             </div>
@@ -104,17 +92,66 @@
         <section id="list-tab" class="tab-content">
             <div class="list-container">
                 <div class="list-tabs">
-                    <button class="list-tab-btn active" data-list="favorites">收藏列表</button>
+                    <button class="list-tab-btn" data-list="favorites">收藏列表</button>
                     <button class="list-tab-btn" data-list="maybe-later">稍后再说</button>
+                    <button class="list-tab-btn" data-list="library">论文库</button>
                 </div>
-                
+
                 <!-- 收藏列表 -->
-                <div id="favorites-list" class="list-content active">
+                <div id="favorites-list" class="list-content">
                     <div class="list-header">
                         <h2>收藏的论文</h2>
                         <div class="pagination-controls" id="favorites-pagination"></div>
                     </div>
                     <div class="papers-list" id="favorites-papers-list"></div>
+                </div>
+
+                <!-- 程序化管理的论文库（所有论文） -->
+                <div id="library-list" class="list-content">
+                    <!-- 管理面板：论文管理操作（抓取、删除未评估、标记已评估未处理为不喜欢等） -->
+                    <div class="admin-panel" id="admin-panel">
+                        <h3>论文管理</h3>
+                        <div class="admin-controls">
+                            <div class="control-row">
+                                <label>上次抓取时间: </label>
+                                <input type="date" id="admin-last-crawl-date">
+                                <button type="button" id="admin-set-last-crawl" class="secondary-btn">设置</button>
+                                <button type="button" id="admin-crawl-now" class="warning-btn" style="margin-left:12px">抓取最新论文</button>
+                            </div>
+                            <div class="control-row">
+                                <button type="button" id="admin-delete-unassessed" class="danger-btn">删除所有未评估的论文</button>
+                                <button type="button" id="admin-mark-assessed-unseen-disliked" class="danger-btn">将已评估但未标记的论文全部标记为不喜欢</button>
+                                <button type="button" id="admin-delete-disliked" class="danger-btn">删除所有不喜欢的论文</button>
+                            </div>
+                            <div class="control-row">
+                                <label for="admin-filter-status">筛选状态:</label>
+                                <select id="admin-filter-status">
+                                    <option value="all">全部</option>
+                                    <option value="unassessed">未评估</option>
+                                    <option value="assessed">已评估</option>
+                                    <option value="unread">未读</option>
+                                    <option value="favorite">喜欢</option>
+                                    <option value="disliked">不喜欢</option>
+                                    <option value="maybe_later">稍后再说</option>
+                                </select>
+                                <button type="button" id="admin-refresh-list" class="primary-btn">刷新列表</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 管理列表：显示所有论文并支持批量操作 -->
+                    <div class="admin-list" id="admin-list">
+                        <div class="admin-actions">
+                            <input type="checkbox" id="admin-select-all"> 全选
+                            <button type="button" id="admin-bulk-favorite" class="secondary-btn">批量标记喜欢</button>
+                            <button type="button" id="admin-bulk-maybe" class="secondary-btn">批量标记稍后再说</button>
+                            <button type="button" id="admin-bulk-dislike" class="secondary-btn">批量标记不喜欢</button>
+                            <button type="button" id="admin-bulk-delete" class="danger-btn">批量删除</button>
+                        </div>
+                        <div class="papers-table" id="admin-papers-table">
+                            <!-- 列表由 JS 渲染 -->
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- 稍后再说列表 -->
@@ -231,30 +268,7 @@
                         </div>
                     </div>
 
-                    <!-- 系统维护 -->
-                    <div class="settings-section">
-                        <h2>🔧 系统维护</h2>
-                        <div class="maintenance-actions">
-                            <button type="button" id="crawl-now-btn" class="warning-btn">
-                                🔄 立即爬取新论文
-                            </button>
-                            <label for="crawl-start-date">起始日期:</label>
-                            <input type="date" id="crawl-start-date">
-                            <label for="crawl-end-date">结束日期:</label>
-                            <input type="date" id="crawl-end-date">
-                            <label for="clean-cache-range">清理范围：</label>
-                            <select id="clean-cache-range">
-                                <option value="30">一个月前</option>
-                                <option value="14">两周前</option>
-                                <option value="7">一周前</option>
-                                <option value="1">一天前</option>
-                                <option value="all">全部</option>
-                            </select>
-                            <button type="button" id="clean-cache-btn" class="danger-btn">
-                                🗑️ 清理缓存（仅删除已标记为不喜欢的论文）
-                            </button>
-                        </div>
-                    </div>
+                    <!-- 系统维护已移至“论文库”管理面板 -->
                 </div>
             </div>
         </section>
