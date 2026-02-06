@@ -198,6 +198,16 @@ body {
     gap: 8px;
 }
 
+.paper-meta {
+    margin-top: 8px;
+}
+
+.paper-date, .paper-detail-date {
+    color: #777;
+    font-size: 0.95rem;
+    display: inline-block;
+}
+
 .category-tag {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;

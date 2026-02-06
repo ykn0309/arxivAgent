@@ -370,6 +370,18 @@ class ArxivAgentApp {
         document.getElementById('paper-arxiv-link').href = paper.arxiv_url;
         document.getElementById('paper-pdf-link').href = paper.pdf_url;
 
+        // 显示发表日期
+        const publishedEl = document.getElementById('paper-published-date');
+        if (publishedEl) {
+            if (paper.published_date) {
+                publishedEl.textContent = `📅 ${utils.formatDate(paper.published_date)}`;
+                publishedEl.style.display = 'inline-block';
+            } else {
+                publishedEl.textContent = '';
+                publishedEl.style.display = 'none';
+            }
+        }
+
         // 显示推荐理由
         const reasonEl = document.getElementById('paper-recommendation-reason');
         if (paper.recommendation_reason) {
@@ -738,6 +750,18 @@ class ArxivAgentApp {
             chineseAbstractEl.parentElement.style.display = 'block';
         } else {
             chineseAbstractEl.parentElement.style.display = 'none';
+        }
+
+        // 显示论文发表日期
+        const detailDateEl = document.getElementById('paper-detail-published-date');
+        if (detailDateEl) {
+            if (paper.published_date) {
+                detailDateEl.textContent = `📅 ${utils.formatDate(paper.published_date)}`;
+                detailDateEl.style.display = 'inline-block';
+            } else {
+                detailDateEl.textContent = '';
+                detailDateEl.style.display = 'none';
+            }
         }
 
         // 打开模态框
