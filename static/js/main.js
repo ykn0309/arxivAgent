@@ -1032,8 +1032,20 @@ class ArxivAgentApp {
             const resp = await api.getLastCrawlDate();
             if (resp.success) {
                 const date = resp.data.last_crawl_date || '';
+                const lastAt = resp.data.last_crawl_at || '';
                 const input = document.getElementById('admin-last-crawl-date');
-                if (input) input.value = date;
+                if (input) {
+                    input.value = date;
+                    // 如果返回了精确 UTC 时间，设置为 title 提示并可见性显示为本地时间
+                    if (lastAt) {
+                        try {
+                            const local = new Date(lastAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            input.title = `上次爬取（本地时间）： ${local}`;
+                        } catch (e) {
+                            input.title = '';
+                        }
+                    }
+                }
             }
         } catch (e) {
             console.error('加载 admin 面板失败', e);

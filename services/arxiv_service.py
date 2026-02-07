@@ -122,18 +122,38 @@ class ArxivService:
                 return 0
 
         else:
-            # 确定爬取时间范围（基于上次爬取日期或默认最近7天）
+            # 确定爬取时间范围（优先使用上次爬取的 UTC 时间点），否则默认最近7天（UTC）
+            last_crawl_iso = self.db.get_config('LAST_CRAWL_AT')
             last_crawl_date_str = self.db.get_config('LAST_CRAWL_DATE')
 
-            if last_crawl_date_str:
-                # 如果存在上次抓取日期：从该日期（包含）开始，直到今天（包含）
-                last_crawl_date = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
-                start_dt = last_crawl_date
-                end_dt = datetime.now()
+            if last_crawl_iso:
+                # LAST_CRAWL_AT 存为 ISO UTC，例如 '2026-02-07T07:54:13Z'
+                try:
+                    if last_crawl_iso.endswith('Z'):
+                        last_crawl_dt = datetime.strptime(last_crawl_iso, '%Y-%m-%dT%H:%M:%SZ')
+                    else:
+                        last_crawl_dt = datetime.fromisoformat(last_crawl_iso)
+                    start_dt = last_crawl_dt
+                except Exception:
+                    # 回退到仅日期字符串（兼容旧数据）
+                    try:
+                        start_dt = datetime.strptime(last_crawl_date_str, '%Y-%m-%d') if last_crawl_date_str else datetime.utcnow() - timedelta(days=6)
+                    except Exception:
+                        start_dt = datetime.utcnow() - timedelta(days=6)
+
+                end_dt = datetime.utcnow()
+
+            elif last_crawl_date_str:
+                # 兼容旧字段：把日期视为 UTC 日期的开始
+                try:
+                    start_dt = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
+                except Exception:
+                    start_dt = datetime.utcnow() - timedelta(days=6)
+                end_dt = datetime.utcnow()
             else:
-                # 初次使用：抓取最近7天（包含今天）
-                end_dt = datetime.now()
-                start_dt = datetime.now() - timedelta(days=6)
+                # 初次使用：抓取最近7天（包含今天），使用 UTC
+                end_dt = datetime.utcnow()
+                start_dt = datetime.utcnow() - timedelta(days=6)
 
         # 如果计算得到的起始日期晚于结束日期，调整为相同日期（避免反向区间）
         if start_dt > end_dt:
@@ -159,9 +179,13 @@ class ArxivService:
                 if result:
                     saved_count += 1
         
-        # 更新最后爬取日期
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        self.db.set_config('LAST_CRAWL_DATE', today_str)
+        # 更新最后爬取时间（保存为 UTC ISO 时间），同时兼容保存日期字符串
+        now_utc = datetime.utcnow()
+        today_date = now_utc.strftime('%Y-%m-%d')
+        now_iso = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+        # 保存两个字段：兼容旧前端用的 LAST_CRAWL_DATE（日期），以及精确的 LAST_CRAWL_AT（UTC timestamp）
+        self.db.set_config('LAST_CRAWL_DATE', today_date)
+        self.db.set_config('LAST_CRAWL_AT', now_iso)
         
         print(f"成功爬取并保存 {saved_count} 篇论文")
         return saved_count
