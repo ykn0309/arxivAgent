@@ -344,7 +344,7 @@ def admin_get_papers():
 
         where_sql = (' WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
 
-        query = f"{base_query} {where_sql} ORDER BY published_date DESC LIMIT ? OFFSET ?"
+        query = f"{base_query} {where_sql} ORDER BY published_at DESC LIMIT ? OFFSET ?"
         params.extend([per_page, offset])
         rows = db.execute_query(query, params)
 

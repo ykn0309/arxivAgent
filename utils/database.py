@@ -35,8 +35,6 @@ class DatabaseManager:
                 abstract TEXT,
                 authors TEXT,
                 categories TEXT,
-                published_date TEXT,
-                updated_date TEXT,
                 published_at TEXT,
                 updated_at TEXT,
                 pdf_url TEXT,
@@ -100,8 +98,8 @@ class DatabaseManager:
                     abstract TEXT,
                     authors TEXT,
                     categories TEXT,
-                    published_date TEXT,
-                    updated_date TEXT,
+                    published_at TEXT,
+                    updated_at TEXT,
                     pdf_url TEXT,
                     arxiv_url TEXT,
                     is_recommended BOOLEAN DEFAULT FALSE,
@@ -161,8 +159,8 @@ class DatabaseManager:
         """
         query = '''
             INSERT OR IGNORE INTO papers 
-            (arxiv_id, title, abstract, authors, categories, published_date, updated_date, published_at, updated_at, pdf_url, arxiv_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (arxiv_id, title, abstract, authors, categories, published_at, updated_at, pdf_url, arxiv_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
         params = (
             paper_data['arxiv_id'],
@@ -170,8 +168,6 @@ class DatabaseManager:
             paper_data['abstract'],
             json.dumps(paper_data.get('authors', [])),
             json.dumps(paper_data.get('categories', [])),
-            paper_data.get('published_date'),
-            paper_data.get('updated_date'),
             paper_data.get('published_at'),
             paper_data.get('updated_at'),
             paper_data.get('pdf_url'),
@@ -253,7 +249,7 @@ class DatabaseManager:
             AND (favorite IS NULL OR favorite = 0)
             AND (maybe_later IS NULL OR maybe_later = 0)
             AND (disliked IS NULL OR disliked = 0)
-            ORDER BY published_date DESC
+            ORDER BY published_at DESC
             LIMIT ? OFFSET ?
         '''
         return self.execute_query(query, (limit, offset))
@@ -268,7 +264,7 @@ class DatabaseManager:
         query = '''
             SELECT * FROM papers 
             WHERE llm_evaluated = FALSE AND is_recommended = FALSE
-            ORDER BY published_date DESC
+            ORDER BY published_at DESC
             LIMIT ?
         '''
         return self.execute_query(query, (limit,))

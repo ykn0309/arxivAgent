@@ -15,8 +15,8 @@ class Paper(Base):
     abstract = Column(Text)
     authors = Column(Text)  # 存储作者列表的JSON字符串
     categories = Column(Text)  # 存储分类列表的JSON字符串
-    published_date = Column(DateTime)
-    updated_date = Column(DateTime)
+    published_at = Column(DateTime)
+    updated_at = Column(DateTime)
     pdf_url = Column(String(200))
     arxiv_url = Column(String(200))
     is_recommended = Column(Boolean, default=False)
@@ -38,8 +38,8 @@ class Paper(Base):
             'abstract': self.abstract,
             'authors': self.authors,
             'categories': self.categories,
-            'published_date': self.published_date.isoformat() if self.published_date else None,
-            'updated_date': self.updated_date.isoformat() if self.updated_date else None,
+            'published_at': self.published_at.isoformat() if self.published_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'pdf_url': self.pdf_url,
             'arxiv_url': self.arxiv_url,
             'is_recommended': self.is_recommended,

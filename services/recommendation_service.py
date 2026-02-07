@@ -299,18 +299,18 @@ class RecommendationService:
             return self.db.execute_query(delete_query, params if params else None)
 
         # 否则按日期删除（disliked 且 published_date < cutoff）
-        cutoff_date = (datetime.now() - timedelta(days=days_old)).strftime('%Y-%m-%d')
+        cutoff_date = (datetime.utcnow() - timedelta(days=days_old)).strftime('%Y-%m-%d')
 
         if protected_ids:
             delete_query = f'''
                 DELETE FROM papers
-                WHERE published_date < ?
+                WHERE date(published_at) < ?
                 AND disliked = 1
                 AND id NOT IN ({','.join(['?'] * len(protected_ids))})
             '''
             params = [cutoff_date] + protected_ids
         else:
-            delete_query = 'DELETE FROM papers WHERE published_date < ? AND disliked = 1'
+            delete_query = 'DELETE FROM papers WHERE date(published_at) < ? AND disliked = 1'
             params = [cutoff_date]
 
         return self.db.execute_query(delete_query, params)

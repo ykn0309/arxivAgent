@@ -395,8 +395,9 @@ class ArxivAgentApp {
         // 显示发表日期
         const publishedEl = document.getElementById('paper-published-date');
         if (publishedEl) {
-            if (paper.published_date) {
-                publishedEl.textContent = `📅 ${utils.formatDate(paper.published_date)}`;
+            const pub = paper.published_at || paper.published_date;
+            if (pub) {
+                publishedEl.textContent = `📅 ${utils.formatDate(pub)}`;
                 publishedEl.style.display = 'inline-block';
             } else {
                 publishedEl.textContent = '';
@@ -598,7 +599,7 @@ class ArxivAgentApp {
                     </div>
                 </div>
                 <div class="paper-item-meta">
-                    <span class="meta-item">📅 ${utils.formatDate(paper.published_date)}</span>
+                    <span class="meta-item">📅 ${utils.formatDate(paper.published_at || paper.published_date)}</span>
                     <span class="meta-item">🏷️ ${categories.length > 0 ? categories.join(', ') : ''}</span>
                 </div>
                 <div class="paper-item-abstract">${utils.truncateText(paper.abstract, 300)}</div>
@@ -778,8 +779,9 @@ class ArxivAgentApp {
         // 显示论文发表日期
         const detailDateEl = document.getElementById('paper-detail-published-date');
         if (detailDateEl) {
-            if (paper.published_date) {
-                detailDateEl.textContent = `📅 ${utils.formatDate(paper.published_date)}`;
+            const pub = paper.published_at || paper.published_date;
+            if (pub) {
+                detailDateEl.textContent = `📅 ${utils.formatDate(pub)}`;
                 detailDateEl.style.display = 'inline-block';
             } else {
                 detailDateEl.textContent = '';
