@@ -37,6 +37,8 @@ class DatabaseManager:
                 categories TEXT,
                 published_date TEXT,
                 updated_date TEXT,
+                published_at TEXT,
+                updated_at TEXT,
                 pdf_url TEXT,
                 arxiv_url TEXT,
                 is_recommended BOOLEAN DEFAULT FALSE,
@@ -76,7 +78,9 @@ class DatabaseManager:
             'maybe_later': 'BOOLEAN',
             'maybe_later_marked_at': 'TEXT',
             'disliked': 'BOOLEAN',
-            'is_summarized': 'BOOLEAN'
+            'is_summarized': 'BOOLEAN',
+            'published_at': 'TEXT',
+            'updated_at': 'TEXT'
         }
         for col, coltype in needed_cols.items():
             if col not in columns:
@@ -157,8 +161,8 @@ class DatabaseManager:
         """
         query = '''
             INSERT OR IGNORE INTO papers 
-            (arxiv_id, title, abstract, authors, categories, published_date, updated_date, pdf_url, arxiv_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (arxiv_id, title, abstract, authors, categories, published_date, updated_date, published_at, updated_at, pdf_url, arxiv_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
         params = (
             paper_data['arxiv_id'],
@@ -168,6 +172,8 @@ class DatabaseManager:
             json.dumps(paper_data.get('categories', [])),
             paper_data.get('published_date'),
             paper_data.get('updated_date'),
+            paper_data.get('published_at'),
+            paper_data.get('updated_at'),
             paper_data.get('pdf_url'),
             paper_data.get('arxiv_url')
         )

@@ -44,22 +44,38 @@ class ArxivService:
             for author in entry.authors:
                 authors.append(author.name)
         
-        # 解析日期
+        # 解析日期（保留完整的 UTC 时间戳及仅日期）
         published_date = None
         updated_date = None
+        published_at = None
+        updated_at = None
         if hasattr(entry, 'published'):
-            published_date = datetime.strptime(entry.published, '%Y-%m-%dT%H:%M:%SZ')
+            try:
+                pd = datetime.strptime(entry.published, '%Y-%m-%dT%H:%M:%SZ')
+                published_at = pd.strftime('%Y-%m-%dT%H:%M:%SZ')
+                published_date = pd.strftime('%Y-%m-%d')
+            except Exception:
+                published_date = entry.published
+                published_at = None
         if hasattr(entry, 'updated'):
-            updated_date = datetime.strptime(entry.updated, '%Y-%m-%dT%H:%M:%SZ')
-        
+            try:
+                ud = datetime.strptime(entry.updated, '%Y-%m-%dT%H:%M:%SZ')
+                updated_at = ud.strftime('%Y-%m-%dT%H:%M:%SZ')
+                updated_date = ud.strftime('%Y-%m-%d')
+            except Exception:
+                updated_date = entry.updated
+                updated_at = None
+
         return {
             'arxiv_id': arxiv_id,
             'title': entry.title,
             'abstract': entry.summary,
             'authors': authors,
             'categories': categories,
-            'published_date': published_date.strftime('%Y-%m-%d') if published_date else None,
-            'updated_date': updated_date.strftime('%Y-%m-%d') if updated_date else None,
+            'published_date': published_date,
+            'updated_date': updated_date,
+            'published_at': published_at,
+            'updated_at': updated_at,
             'pdf_url': f'http://arxiv.org/pdf/{arxiv_id}',
             'arxiv_url': f'http://arxiv.org/abs/{arxiv_id}'
         }
@@ -168,10 +184,31 @@ class ArxivService:
         
         # 获取论文
         papers = self.fetch_papers(categories, start_date, end_date)
-        
-        # 保存到数据库
+        # 如果存在精确的上次爬取时间（UTC），则按 entry.updated (秒级) 过滤已处理条目
+        last_crawl_iso = self.db.get_config('LAST_CRAWL_AT')
+        last_crawl_dt = None
+        if last_crawl_iso:
+            try:
+                if last_crawl_iso.endswith('Z'):
+                    last_crawl_dt = datetime.strptime(last_crawl_iso, '%Y-%m-%dT%H:%M:%SZ')
+                else:
+                    last_crawl_dt = datetime.fromisoformat(last_crawl_iso)
+            except Exception:
+                last_crawl_dt = None
+
+        # 保存到数据库，按秒级时间戳过滤重复
         saved_count = 0
         for paper in papers:
+            # 若有 updated_at 字段并且小于等于上次爬取时间，则跳过
+            try:
+                if last_crawl_dt and paper.get('updated_at'):
+                    pud = datetime.strptime(paper.get('updated_at'), '%Y-%m-%dT%H:%M:%SZ')
+                    if pud <= last_crawl_dt:
+                        continue
+            except Exception:
+                # 若解析失败，落回为插入（保守）
+                pass
+
             result = self.db.insert_paper(paper)
             try:
                 saved_count += int(result)
