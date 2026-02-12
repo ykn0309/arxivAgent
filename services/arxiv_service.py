@@ -44,38 +44,22 @@ class ArxivService:
             for author in entry.authors:
                 authors.append(author.name)
         
-        # 解析日期（保留完整的 UTC 时间戳及仅日期）
+        # 解析日期
         published_date = None
         updated_date = None
-        published_at = None
-        updated_at = None
         if hasattr(entry, 'published'):
-            try:
-                pd = datetime.strptime(entry.published, '%Y-%m-%dT%H:%M:%SZ')
-                published_at = pd.strftime('%Y-%m-%dT%H:%M:%SZ')
-                published_date = pd.strftime('%Y-%m-%d')
-            except Exception:
-                published_date = entry.published
-                published_at = None
+            published_date = datetime.strptime(entry.published, '%Y-%m-%dT%H:%M:%SZ')
         if hasattr(entry, 'updated'):
-            try:
-                ud = datetime.strptime(entry.updated, '%Y-%m-%dT%H:%M:%SZ')
-                updated_at = ud.strftime('%Y-%m-%dT%H:%M:%SZ')
-                updated_date = ud.strftime('%Y-%m-%d')
-            except Exception:
-                updated_date = entry.updated
-                updated_at = None
-
+            updated_date = datetime.strptime(entry.updated, '%Y-%m-%dT%H:%M:%SZ')
+        
         return {
             'arxiv_id': arxiv_id,
             'title': entry.title,
             'abstract': entry.summary,
             'authors': authors,
             'categories': categories,
-            'published_date': published_date,
-            'updated_date': updated_date,
-            'published_at': published_at,
-            'updated_at': updated_at,
+            'published_date': published_date.strftime('%Y-%m-%d') if published_date else None,
+            'updated_date': updated_date.strftime('%Y-%m-%d') if updated_date else None,
             'pdf_url': f'http://arxiv.org/pdf/{arxiv_id}',
             'arxiv_url': f'http://arxiv.org/abs/{arxiv_id}'
         }
@@ -138,38 +122,18 @@ class ArxivService:
                 return 0
 
         else:
-            # 确定爬取时间范围（优先使用上次爬取的 UTC 时间点），否则默认最近7天（UTC）
-            last_crawl_iso = self.db.get_config('LAST_CRAWL_AT')
+            # 确定爬取时间范围（基于上次爬取日期或默认最近7天）
             last_crawl_date_str = self.db.get_config('LAST_CRAWL_DATE')
 
-            if last_crawl_iso:
-                # LAST_CRAWL_AT 存为 ISO UTC，例如 '2026-02-07T07:54:13Z'
-                try:
-                    if last_crawl_iso.endswith('Z'):
-                        last_crawl_dt = datetime.strptime(last_crawl_iso, '%Y-%m-%dT%H:%M:%SZ')
-                    else:
-                        last_crawl_dt = datetime.fromisoformat(last_crawl_iso)
-                    start_dt = last_crawl_dt
-                except Exception:
-                    # 回退到仅日期字符串（兼容旧数据）
-                    try:
-                        start_dt = datetime.strptime(last_crawl_date_str, '%Y-%m-%d') if last_crawl_date_str else datetime.utcnow() - timedelta(days=6)
-                    except Exception:
-                        start_dt = datetime.utcnow() - timedelta(days=6)
-
-                end_dt = datetime.utcnow()
-
-            elif last_crawl_date_str:
-                # 兼容旧字段：把日期视为 UTC 日期的开始
-                try:
-                    start_dt = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
-                except Exception:
-                    start_dt = datetime.utcnow() - timedelta(days=6)
-                end_dt = datetime.utcnow()
+            if last_crawl_date_str:
+                # 如果存在上次抓取日期：从该日期（包含）开始，直到今天（包含）
+                last_crawl_date = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
+                start_dt = last_crawl_date
+                end_dt = datetime.now()
             else:
-                # 初次使用：抓取最近7天（包含今天），使用 UTC
-                end_dt = datetime.utcnow()
-                start_dt = datetime.utcnow() - timedelta(days=6)
+                # 初次使用：抓取最近7天（包含今天）
+                end_dt = datetime.now()
+                start_dt = datetime.now() - timedelta(days=6)
 
         # 如果计算得到的起始日期晚于结束日期，调整为相同日期（避免反向区间）
         if start_dt > end_dt:
@@ -184,31 +148,10 @@ class ArxivService:
         
         # 获取论文
         papers = self.fetch_papers(categories, start_date, end_date)
-        # 如果存在精确的上次爬取时间（UTC），则按 entry.updated (秒级) 过滤已处理条目
-        last_crawl_iso = self.db.get_config('LAST_CRAWL_AT')
-        last_crawl_dt = None
-        if last_crawl_iso:
-            try:
-                if last_crawl_iso.endswith('Z'):
-                    last_crawl_dt = datetime.strptime(last_crawl_iso, '%Y-%m-%dT%H:%M:%SZ')
-                else:
-                    last_crawl_dt = datetime.fromisoformat(last_crawl_iso)
-            except Exception:
-                last_crawl_dt = None
-
-        # 保存到数据库，按秒级时间戳过滤重复
+        
+        # 保存到数据库
         saved_count = 0
         for paper in papers:
-            # 若有 updated_at 字段并且小于等于上次爬取时间，则跳过
-            try:
-                if last_crawl_dt and paper.get('updated_at'):
-                    pud = datetime.strptime(paper.get('updated_at'), '%Y-%m-%dT%H:%M:%SZ')
-                    if pud <= last_crawl_dt:
-                        continue
-            except Exception:
-                # 若解析失败，落回为插入（保守）
-                pass
-
             result = self.db.insert_paper(paper)
             try:
                 saved_count += int(result)
@@ -216,13 +159,9 @@ class ArxivService:
                 if result:
                     saved_count += 1
         
-        # 更新最后爬取时间（保存为 UTC ISO 时间），同时兼容保存日期字符串
-        now_utc = datetime.utcnow()
-        today_date = now_utc.strftime('%Y-%m-%d')
-        now_iso = now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-        # 保存两个字段：兼容旧前端用的 LAST_CRAWL_DATE（日期），以及精确的 LAST_CRAWL_AT（UTC timestamp）
-        self.db.set_config('LAST_CRAWL_DATE', today_date)
-        self.db.set_config('LAST_CRAWL_AT', now_iso)
+        # 更新最后爬取日期
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        self.db.set_config('LAST_CRAWL_DATE', today_str)
         
         print(f"成功爬取并保存 {saved_count} 篇论文")
         return saved_count

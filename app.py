@@ -283,9 +283,8 @@ def get_favorites():
 @app.route('/api/admin/last-crawl')
 def admin_last_crawl():
     try:
-        last_date = db.get_config('LAST_CRAWL_DATE', '')
-        last_at = db.get_config('LAST_CRAWL_AT', '')
-        return jsonify({'success': True, 'data': {'last_crawl_date': last_date, 'last_crawl_at': last_at}})
+        last = db.get_config('LAST_CRAWL_DATE', '')
+        return jsonify({'success': True, 'data': {'last_crawl_date': last}})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -344,7 +343,7 @@ def admin_get_papers():
 
         where_sql = (' WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
 
-        query = f"{base_query} {where_sql} ORDER BY published_at DESC LIMIT ? OFFSET ?"
+        query = f"{base_query} {where_sql} ORDER BY published_date DESC LIMIT ? OFFSET ?"
         params.extend([per_page, offset])
         rows = db.execute_query(query, params)
 

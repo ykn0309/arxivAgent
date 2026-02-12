@@ -395,9 +395,8 @@ class ArxivAgentApp {
         // 显示发表日期
         const publishedEl = document.getElementById('paper-published-date');
         if (publishedEl) {
-            const pub = paper.published_at || paper.published_date;
-            if (pub) {
-                publishedEl.textContent = `📅 ${utils.formatDate(pub)}`;
+            if (paper.published_date) {
+                publishedEl.textContent = `📅 ${utils.formatDate(paper.published_date)}`;
                 publishedEl.style.display = 'inline-block';
             } else {
                 publishedEl.textContent = '';
@@ -599,7 +598,7 @@ class ArxivAgentApp {
                     </div>
                 </div>
                 <div class="paper-item-meta">
-                    <span class="meta-item">📅 ${utils.formatDate(paper.published_at || paper.published_date)}</span>
+                    <span class="meta-item">📅 ${utils.formatDate(paper.published_date)}</span>
                     <span class="meta-item">🏷️ ${categories.length > 0 ? categories.join(', ') : ''}</span>
                 </div>
                 <div class="paper-item-abstract">${utils.truncateText(paper.abstract, 300)}</div>
@@ -779,9 +778,8 @@ class ArxivAgentApp {
         // 显示论文发表日期
         const detailDateEl = document.getElementById('paper-detail-published-date');
         if (detailDateEl) {
-            const pub = paper.published_at || paper.published_date;
-            if (pub) {
-                detailDateEl.textContent = `📅 ${utils.formatDate(pub)}`;
+            if (paper.published_date) {
+                detailDateEl.textContent = `📅 ${utils.formatDate(paper.published_date)}`;
                 detailDateEl.style.display = 'inline-block';
             } else {
                 detailDateEl.textContent = '';
@@ -1034,20 +1032,8 @@ class ArxivAgentApp {
             const resp = await api.getLastCrawlDate();
             if (resp.success) {
                 const date = resp.data.last_crawl_date || '';
-                const lastAt = resp.data.last_crawl_at || '';
                 const input = document.getElementById('admin-last-crawl-date');
-                if (input) {
-                    input.value = date;
-                    // 如果返回了精确 UTC 时间，设置为 title 提示并可见性显示为本地时间
-                    if (lastAt) {
-                        try {
-                            const local = new Date(lastAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                            input.title = `上次爬取（本地时间）： ${local}`;
-                        } catch (e) {
-                            input.title = '';
-                        }
-                    }
-                }
+                if (input) input.value = date;
             }
         } catch (e) {
             console.error('加载 admin 面板失败', e);

@@ -35,8 +35,8 @@ class DatabaseManager:
                 abstract TEXT,
                 authors TEXT,
                 categories TEXT,
-                published_at TEXT,
-                updated_at TEXT,
+                published_date TEXT,
+                updated_date TEXT,
                 pdf_url TEXT,
                 arxiv_url TEXT,
                 is_recommended BOOLEAN DEFAULT FALSE,
@@ -76,9 +76,7 @@ class DatabaseManager:
             'maybe_later': 'BOOLEAN',
             'maybe_later_marked_at': 'TEXT',
             'disliked': 'BOOLEAN',
-            'is_summarized': 'BOOLEAN',
-            'published_at': 'TEXT',
-            'updated_at': 'TEXT'
+            'is_summarized': 'BOOLEAN'
         }
         for col, coltype in needed_cols.items():
             if col not in columns:
@@ -98,8 +96,8 @@ class DatabaseManager:
                     abstract TEXT,
                     authors TEXT,
                     categories TEXT,
-                    published_at TEXT,
-                    updated_at TEXT,
+                    published_date TEXT,
+                    updated_date TEXT,
                     pdf_url TEXT,
                     arxiv_url TEXT,
                     is_recommended BOOLEAN DEFAULT FALSE,
@@ -159,7 +157,7 @@ class DatabaseManager:
         """
         query = '''
             INSERT OR IGNORE INTO papers 
-            (arxiv_id, title, abstract, authors, categories, published_at, updated_at, pdf_url, arxiv_url)
+            (arxiv_id, title, abstract, authors, categories, published_date, updated_date, pdf_url, arxiv_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         '''
         params = (
@@ -168,8 +166,8 @@ class DatabaseManager:
             paper_data['abstract'],
             json.dumps(paper_data.get('authors', [])),
             json.dumps(paper_data.get('categories', [])),
-            paper_data.get('published_at'),
-            paper_data.get('updated_at'),
+            paper_data.get('published_date'),
+            paper_data.get('updated_date'),
             paper_data.get('pdf_url'),
             paper_data.get('arxiv_url')
         )
@@ -249,7 +247,7 @@ class DatabaseManager:
             AND (favorite IS NULL OR favorite = 0)
             AND (maybe_later IS NULL OR maybe_later = 0)
             AND (disliked IS NULL OR disliked = 0)
-            ORDER BY published_at DESC
+            ORDER BY published_date DESC
             LIMIT ? OFFSET ?
         '''
         return self.execute_query(query, (limit, offset))
@@ -264,7 +262,7 @@ class DatabaseManager:
         query = '''
             SELECT * FROM papers 
             WHERE llm_evaluated = FALSE AND is_recommended = FALSE
-            ORDER BY published_at DESC
+            ORDER BY published_date DESC
             LIMIT ?
         '''
         return self.execute_query(query, (limit,))

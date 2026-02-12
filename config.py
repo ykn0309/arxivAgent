@@ -28,7 +28,6 @@ class Config:
         'llm_model': 'LLM_MODEL',
         'user_interests': 'USER_INTERESTS',
         'categories': 'CATEGORIES',
-        'last_crawl_date': 'LAST_CRAWL_DATE',
         'favorite_summary': 'FAVORITE_SUMMARY'
     }
     
