@@ -144,8 +144,7 @@ class RecommendationService:
         if action == 'favorite':
             # 标记为收藏
             self.db.mark_favorite(paper_id, user_note)
-            # 触发增量总结（延后或异步更好，这里直接触发）
-            self._trigger_incremental_summary()
+            # 不再自动触发总结，需要用户手动触发
         elif action == 'maybe_later':
             # 标记为稍后再说
             self.db.mark_maybe_later(paper_id)
@@ -261,8 +260,7 @@ class RecommendationService:
         # 取消 maybe_later 标记并添加收藏标记
         self.db.unmark_maybe_later(paper_id)
         self.db.mark_favorite(paper_id, user_note)
-        # 触发增量总结
-        self._trigger_incremental_summary()
+        # 不再自动触发总结，需要用户手动触发
     
     def delete_favorite(self, paper_id: int):
         """取消收藏（通过 paper_id）"""
