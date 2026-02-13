@@ -116,7 +116,8 @@ class ArxivService:
                 if end_date:
                     end_dt = datetime.strptime(end_date, '%Y-%m-%d')
                 else:
-                    end_dt = datetime.now()
+                    # arXiv 可能没有当天的文章，所以结束日期减去一天
+                    end_dt = datetime.now() - timedelta(days=1)
             except Exception as e:
                 print(f"解析传入日期失败: {e}")
                 return 0
@@ -126,14 +127,15 @@ class ArxivService:
             last_crawl_date_str = self.db.get_config('LAST_CRAWL_DATE')
 
             if last_crawl_date_str:
-                # 如果存在上次抓取日期：从该日期（包含）开始，直到今天（包含）
+                # 如果存在上次抓取日期：从该日期（包含）开始，直到昨天（包含）
+                # 注意：arXiv 可能没有当天的文章，所以结束日期减去一天
                 last_crawl_date = datetime.strptime(last_crawl_date_str, '%Y-%m-%d')
                 start_dt = last_crawl_date
-                end_dt = datetime.now()
+                end_dt = datetime.now() - timedelta(days=1)
             else:
-                # 初次使用：抓取最近7天（包含今天）
-                end_dt = datetime.now()
-                start_dt = datetime.now() - timedelta(days=6)
+                # 初次使用
+                end_dt = datetime.now() - timedelta(days=1)
+                start_dt = end_dt
 
         # 如果计算得到的起始日期晚于结束日期，调整为相同日期（避免反向区间）
         if start_dt > end_dt:
@@ -159,9 +161,9 @@ class ArxivService:
                 if result:
                     saved_count += 1
         
-        # 更新最后爬取日期
-        today_str = datetime.now().strftime('%Y-%m-%d')
-        self.db.set_config('LAST_CRAWL_DATE', today_str)
+        # 更新最后爬取日期（设置为昨天，因为我们已经抓取了昨天及之前的文章）
+        yesterday_str = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        self.db.set_config('LAST_CRAWL_DATE', yesterday_str)
         
         print(f"成功爬取并保存 {saved_count} 篇论文")
         return saved_count
