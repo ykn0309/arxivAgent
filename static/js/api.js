@@ -136,16 +136,16 @@ class APIClient {
         });
     }
 
-    async deleteUnassessed() {
-        return this.request('/admin/delete-unassessed', { method: 'POST' });
+    async deleteUnprocessed() {
+        return this.request('/admin/delete-unprocessed', { method: 'POST' });
     }
 
-    async deleteDisliked() {
-        return this.request('/admin/delete-disliked', { method: 'POST' });
+    async deleteOthers() {
+        return this.request('/admin/delete-others', { method: 'POST' });
     }
 
-    async markAssessedUnseenDisliked() {
-        return this.request('/admin/mark-assessed-unseen-disliked', { method: 'POST' });
+    async markUnreadRead() {
+        return this.request('/admin/mark-unread-read', { method: 'POST' });
     }
 
     async bulkUpdate(paperIds = [], action) {

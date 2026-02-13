@@ -118,9 +118,11 @@
                                 <button type="button" id="admin-crawl-now" class="warning-btn" style="margin-left:12px">抓取最新论文</button>
                             </div>
                             <div class="control-row">
-                                <button type="button" id="admin-delete-unassessed" class="danger-btn">删除所有未评估的论文</button>
-                                <button type="button" id="admin-mark-assessed-unseen-disliked" class="danger-btn">将已评估但未标记的论文全部标记为不喜欢</button>
-                                <button type="button" id="admin-delete-disliked" class="danger-btn">删除所有不喜欢的论文</button>
+                                <button type="button" id="admin-delete-unprocessed" class="danger-btn" title="删除未被评估且未被用户标记的论文">清理未处理论文</button>
+                                <button type="button" id="admin-delete-others" class="danger-btn" title="删除除了收藏和稍后再说之外的所有论文">清理其他论文</button>
+                            </div>
+                            <div class="control-row">
+                                <button type="button" id="admin-mark-unread-read" class="warning-btn" title="将所有未读论文标记为已读">标记未读为已读</button>
                             </div>
                             <div class="control-row">
                                 <label for="admin-filter-status">筛选状态:</label>

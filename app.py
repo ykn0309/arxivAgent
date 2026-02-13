@@ -346,33 +346,36 @@ def admin_get_papers():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/admin/delete-unassessed', methods=['POST'])
-def admin_delete_unassessed():
+@app.route('/api/admin/delete-unprocessed', methods=['POST'])
+def admin_delete_unprocessed():
     try:
-        # 删除未评估且非收藏/非稍后标记的论文
-        query = "DELETE FROM papers WHERE llm_evaluated = 0 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0)"
+        # 删除未处理的论文（未被评估且未被用户标记）
+        query = "DELETE FROM papers WHERE llm_evaluated = 0 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0) AND (disliked IS NULL OR disliked = 0)"
         res = db.execute_query(query)
         return jsonify({'success': True, 'data': {'deleted': res}})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/admin/delete-disliked', methods=['POST'])
-def admin_delete_disliked():
+@app.route('/api/admin/delete-others', methods=['POST'])
+def admin_delete_others():
     try:
-        # 删除所有被标记为不喜欢的论文
-        query = "DELETE FROM papers WHERE disliked = 1"
+        # 删除除了收藏和稍后再说之外的所有论文
+        query = "DELETE FROM papers WHERE (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0)"
         res = db.execute_query(query)
         return jsonify({'success': True, 'data': {'deleted': res}})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/admin/mark-assessed-unseen-disliked', methods=['POST'])
-def admin_mark_assessed_unseen_disliked():
+@app.route('/api/admin/mark-unread-read', methods=['POST'])
+def admin_mark_unread_read():
     try:
-        # 仅把已由LLM评估且被LLM推荐，但用户未标记（未收藏/未稍后/未不喜欢）的论文标记为不喜欢
-        query = "UPDATE papers SET disliked = 1 WHERE llm_evaluated = 1 AND is_recommended = 1 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0) AND (disliked IS NULL OR disliked = 0)"
+        # 将所有未读论文标记为已读（用户没有做任何标记的论文）
+        # 已读的意思是：做了喜欢、不喜欢或稍后再说的任意一个标记
+        # 所以，将未读论文标记为已读，就是将它们标记为不喜欢
+        # 只处理处理过的论文（llm_evaluated = 1），未处理的论文不用管
+        query = "UPDATE papers SET disliked = 1 WHERE llm_evaluated = 1 AND (favorite IS NULL OR favorite = 0) AND (maybe_later IS NULL OR maybe_later = 0) AND (disliked IS NULL OR disliked = 0)"
         res = db.execute_query(query)
         return jsonify({'success': True, 'data': {'updated': res}})
     except Exception as e:

@@ -155,7 +155,9 @@ http://localhost:5001
 
 - 管理论文：
   - `GET /api/admin/papers?status=unread&page=1&per_page=50` — 管理界面分页（注意：`unread` = 已由LLM评估且被推荐，但用户未标记）
-  - `POST /api/admin/delete-disliked` — 删除所有被标记为不喜欢的论文
+  - `POST /api/admin/delete-unprocessed` — 删除所有未处理的论文（未被评估且未被用户标记）
+  - `POST /api/admin/delete-others` — 删除除了收藏和稍后再说之外的所有论文
+  - `POST /api/admin/mark-unread-read` — 将所有未读论文标记为已读
 
 - 状态：
   - `GET /api/recommendation/status` — 返回 { pending, recommended_unseen, last_run, last_evaluated_count }

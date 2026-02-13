@@ -1142,32 +1142,32 @@ class ArxivAgentApp {
         if (crawlBtn) crawlBtn.addEventListener('click', () => this.adminCrawlNow());
 
 
-        const delUnassessed = document.getElementById('admin-delete-unassessed');
-        if (delUnassessed) delUnassessed.addEventListener('click', async () => {
-            if (!confirm('确定删除所有未评估且未被收藏/未被标记为稍后再说的论文吗？')) return;
+        const delUnprocessed = document.getElementById('admin-delete-unprocessed');
+        if (delUnprocessed) delUnprocessed.addEventListener('click', async () => {
+            if (!confirm('确定删除所有未处理的论文吗？（未被评估且未被用户标记）')) return;
             try {
-                const resp = await api.deleteUnassessed();
-                if (resp.success) utils.showNotification('已删除', 'success');
+                const resp = await api.deleteUnprocessed();
+                if (resp.success) utils.showNotification('已清理未处理论文', 'success');
                 this.loadAdminPapers(this.adminPage);
             } catch (e) { utils.showNotification('操作失败: ' + e.message, 'error'); }
         });
 
-        const markDisliked = document.getElementById('admin-mark-assessed-unseen-disliked');
-        if (markDisliked) markDisliked.addEventListener('click', async () => {
-            if (!confirm('将所有已评估但未被标记的论文标记为不喜欢？')) return;
+        const delOthers = document.getElementById('admin-delete-others');
+        if (delOthers) delOthers.addEventListener('click', async () => {
+            if (!confirm('确定删除除了收藏和稍后再说之外的所有论文吗？该操作不可恢复。')) return;
             try {
-                const resp = await api.markAssessedUnseenDisliked();
-                if (resp.success) utils.showNotification('已标记', 'success');
+                const resp = await api.deleteOthers();
+                if (resp.success) utils.showNotification('已清理其他论文', 'success');
                 this.loadAdminPapers(this.adminPage);
             } catch (e) { utils.showNotification('操作失败: ' + e.message, 'error'); }
         });
 
-        const delDislikedAll = document.getElementById('admin-delete-disliked');
-        if (delDislikedAll) delDislikedAll.addEventListener('click', async () => {
-            if (!confirm('确定删除所有已标记为不喜欢的论文吗？该操作不可恢复。')) return;
+        const markUnreadRead = document.getElementById('admin-mark-unread-read');
+        if (markUnreadRead) markUnreadRead.addEventListener('click', async () => {
+            if (!confirm('确定将所有未读论文标记为已读吗？')) return;
             try {
-                const resp = await api.deleteDisliked();
-                if (resp.success) utils.showNotification('已删除所有不喜欢的论文', 'success');
+                const resp = await api.markUnreadRead();
+                if (resp.success) utils.showNotification('已标记未读论文为已读', 'success');
                 this.loadAdminPapers(this.adminPage);
             } catch (e) { utils.showNotification('操作失败: ' + e.message, 'error'); }
         });
