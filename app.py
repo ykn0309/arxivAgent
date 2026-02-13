@@ -289,17 +289,6 @@ def admin_last_crawl():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/admin/set-last-crawl-date', methods=['POST'])
-def admin_set_last_crawl():
-    try:
-        data = request.get_json() or {}
-        date = data.get('date')
-        if not date:
-            return jsonify({'success': False, 'error': '缺少日期'}), 400
-        db.set_config('LAST_CRAWL_DATE', date)
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/admin/crawl-now', methods=['POST'])

@@ -212,3 +212,161 @@ class ArxivService:
             'cs.SI': '社会与信息网络：研究社会网络与信息网络的建模、分析与应用，包括在线社交系统与信息传播',
             'cs.SY': '系统与控制：等同于eess.SY，涵盖控制系统的分析与设计，包括非线性、随机、鲁棒与分布式控制'
         }
+
+
+if __name__ == "__main__":
+    """测试 ArxivService 的各种功能"""
+    import sys
+    import os
+
+    # 添加项目根目录到Python路径
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    from unittest.mock import Mock
+
+    print("=" * 60)
+    print("ArxivService 测试")
+    print("=" * 60)
+
+    # 创建服务实例
+    service = ArxivService()
+
+    # 测试 1: 获取 CS 分类
+    print("\n[测试 1] 获取 CS 分类")
+    try:
+        cs_categories = service.get_cs_categories()
+        print(f"  成功获取 {len(cs_categories)} 个 CS 分类")
+        print(f"  示例分类: {list(cs_categories.keys())[:5]}")
+    except Exception as e:
+        print(f"  错误: {e}")
+
+    # 测试 2: 构建搜索查询
+    print("\n[测试 2] 构建搜索查询")
+    try:
+        categories = ['cs.AI', 'cs.LG']
+        start_date = '20260211'
+        end_date = '20260212'
+        query = service.build_search_query(categories, start_date, end_date)
+        print(f"  分类: {categories}")
+        print(f"  日期范围: {start_date} 到 {end_date}")
+        print(f"  生成的查询: {query}")
+    except Exception as e:
+        print(f"  错误: {e}")
+
+    # 测试 3: 解析 arXiv 条目（使用模拟数据）
+    print("\n[测试 3] 解析 arXiv 条目（模拟数据）")
+    try:
+        # 创建模拟的 arXiv 条目
+        mock_entry = Mock()
+        mock_entry.id = 'http://arxiv.org/abs/2602.12345'
+        mock_entry.title = 'Test Paper Title'
+        mock_entry.summary = 'This is a test paper abstract.'
+        mock_entry.published = '2026-02-11T10:30:00Z'
+        mock_entry.updated = '2026-02-12T14:45:00Z'
+
+        # 模拟作者
+        author1 = Mock()
+        author1.name = 'John Doe'
+        author2 = Mock()
+        author2.name = 'Jane Smith'
+        mock_entry.authors = [author1, author2]
+
+        # 模拟分类标签
+        tag1 = Mock()
+        tag1.term = 'cs.AI'
+        tag2 = Mock()
+        tag2.term = 'cs.LG'
+        mock_entry.tags = [tag1, tag2]
+
+        parsed = service.parse_arxiv_entry(mock_entry)
+        print(f"  arXiv ID: {parsed['arxiv_id']}")
+        print(f"  标题: {parsed['title']}")
+        print(f"  作者: {parsed['authors']}")
+        print(f"  分类: {parsed['categories']}")
+        print(f"  发布日期: {parsed['published_date']}")
+        print(f"  更新日期: {parsed['updated_date']}")
+        print(f"  PDF URL: {parsed['pdf_url']}")
+    except Exception as e:
+        print(f"  错误: {e}")
+
+    # 测试 4: 测试 fetch_papers（仅测试查询构建，不实际请求）
+    print("\n[测试 4] fetch_papers 查询构建（不实际请求）")
+    try:
+        categories = ['cs.AI']
+        start_date = '20260211'
+        end_date = '20260212'
+
+        # 构建查询参数
+        search_params = service.build_search_query(categories, start_date, end_date)
+        url = f"{service.base_url}?{search_params}&sortBy=lastUpdatedDate&sortOrder=descending&max_results=10"
+        print(f"  构建的 URL: {url}")
+        print(f"  注意: 实际请求需要网络连接，此处仅测试查询构建")
+    except Exception as e:
+        print(f"  错误: {e}")
+
+    # 测试 5: 测试 crawl_recent_papers（仅测试逻辑，不实际爬取）
+    print("\n[测试 5] crawl_recent_papers 逻辑测试")
+    try:
+        # 测试日期范围计算
+        from datetime import datetime, timedelta
+
+        # 模拟 LAST_CRAWL_DATE
+        last_crawl_date_str = service.db.get_config('LAST_CRAWL_DATE')
+        if last_crawl_date_str:
+            print(f"  数据库中的 LAST_CRAWL_DATE: {last_crawl_date_str}")
+        else:
+            print(f"  数据库中没有 LAST_CRAWL_DATE，将使用默认逻辑")
+
+        # 测试日期范围计算（修改后的逻辑：结束日期减去一天）
+        end_dt = datetime.now() - timedelta(days=1)
+        start_dt = end_dt - timedelta(days=6)
+        print(f"  默认时间范围: {start_dt.strftime('%Y-%m-%d')} 到 {end_dt.strftime('%Y-%m-%d')}")
+        print(f"  注意：结束日期已经减去一天，因为 arXiv 可能没有当天的文章")
+
+        # 测试显式日期范围
+        test_start = '2026-02-10'
+        test_end = '2026-02-11'
+        test_start_dt = datetime.strptime(test_start, '%Y-%m-%d')
+        test_end_dt = datetime.strptime(test_end, '%Y-%m-%d')
+        print(f"  测试日期范围: {test_start} 到 {test_end}")
+        print(f"  arXiv API 格式: {test_start_dt.strftime('%Y%m%d')} 到 {test_end_dt.strftime('%Y%m%d')}")
+    except Exception as e:
+        print(f"  错误: {e}")
+
+    # 测试 6: 测试数据库配置读取
+    print("\n[测试 6] 数据库配置读取")
+    try:
+        categories_config = service.db.get_config('CATEGORIES', '')
+        if categories_config:
+            print(f"  配置的分类: {categories_config}")
+        else:
+            print(f"  没有配置分类，将使用默认分类")
+
+        default_categories = service.config.DEFAULT_CATEGORIES
+        print(f"  默认分类: {default_categories}")
+    except Exception as e:
+        print(f"  错误: {e}")
+
+    # 测试 7: 测试实际爬取（可选，需要网络连接）
+    print("\n[测试 7] 实际爬取测试（可选）")
+    print("  注意: 这会实际请求 arXiv API，可能需要网络连接")
+    print("  如果要测试，请取消下面的注释")
+
+    # 取消注释以测试实际爬取
+    # try:
+    #     print("  正在测试实际爬取...")
+    #     # 使用非常小的日期范围以减少数据量
+    #     result = service.crawl_recent_papers(
+    #         force_categories=['cs.AI'],
+    #         start_date='2026-02-10',
+    #         end_date='2026-02-11'
+    #     )
+    #     print(f"  爬取结果: {result} 篇论文")
+    # except Exception as e:
+    #     print(f"  错误: {e}")
+
+    print("\n" + "=" * 60)
+    print("测试完成")
+    print("=" * 60)

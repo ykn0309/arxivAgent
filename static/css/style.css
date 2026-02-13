@@ -528,9 +528,8 @@ body {
 
 .admin-controls label { margin-right: 6px; font-weight:600; }
 
-/* 增大筛选下拉与日期输入尺寸 */
-.admin-controls select#admin-filter-status,
-.admin-controls input[type="date"]#admin-last-crawl-date {
+/* 增大筛选下拉尺寸 */
+.admin-controls select#admin-filter-status {
     padding: 10px 12px;
     font-size: 1rem;
     border-radius: 8px;

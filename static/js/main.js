@@ -1141,15 +1141,6 @@ class ArxivAgentApp {
         const crawlBtn = document.getElementById('admin-crawl-now');
         if (crawlBtn) crawlBtn.addEventListener('click', () => this.adminCrawlNow());
 
-        const setLastBtn = document.getElementById('admin-set-last-crawl');
-        if (setLastBtn) setLastBtn.addEventListener('click', async () => {
-            const input = document.getElementById('admin-last-crawl-date');
-            if (!input || !input.value) return utils.showNotification('请选择日期', 'error');
-            try {
-                await api.setLastCrawlDate(input.value);
-                utils.showNotification('更新成功', 'success');
-            } catch (e) { utils.showNotification('更新失败: ' + e.message, 'error'); }
-        });
 
         const delUnassessed = document.getElementById('admin-delete-unassessed');
         if (delUnassessed) delUnassessed.addEventListener('click', async () => {

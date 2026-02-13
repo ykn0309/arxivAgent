@@ -128,12 +128,6 @@ class APIClient {
         return this.request('/admin/last-crawl');
     }
 
-    async setLastCrawlDate(date) {
-        return this.request('/admin/set-last-crawl-date', {
-            method: 'POST',
-            body: { date }
-        });
-    }
 
     async adminCrawlNow(body = {}) {
         return this.request('/admin/crawl-now', {
