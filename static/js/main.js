@@ -21,8 +21,8 @@ class ArxivAgentApp {
         });
         this.loadInitialData();
         this.loadAdminPanel();
-        // 每 30 秒刷新一次推荐进度（仅数字），不刷新推荐卡片
-        this._statusInterval = setInterval(() => this.loadRecommendationStatus(), 30000);
+        // 每 5 秒刷新一次推荐进度（仅数字），不刷新推荐卡片
+        this._statusInterval = setInterval(() => this.loadRecommendationStatus(), 5000);
     }
 
     // 可用于在需要时停止自动刷新
@@ -1032,11 +1032,25 @@ class ArxivAgentApp {
             const resp = await api.getLastCrawlDate();
             if (resp.success) {
                 const date = resp.data.last_crawl_date || '';
-                const input = document.getElementById('admin-last-crawl-date');
-                if (input) input.value = date;
+                const display = document.getElementById('admin-last-crawl-date');
+                if (display) {
+                    if (date) {
+                        // 格式化日期显示
+                        const formattedDate = utils.formatDateForDisplay(date);
+                        display.textContent = formattedDate;
+                        display.classList.add('has-value');
+                    } else {
+                        display.textContent = '--';
+                        display.classList.remove('has-value');
+                    }
+                }
+            } else {
+                console.error('获取上次抓取时间失败:', resp.error);
+                utils.showNotification('获取上次抓取时间失败: ' + resp.error, 'error');
             }
         } catch (e) {
             console.error('加载 admin 面板失败', e);
+            utils.showNotification('加载 admin 面板失败: ' + e.message, 'error');
         }
     }
 

@@ -264,5 +264,25 @@ const utils = {
     },
     
     // modal functions removed — modals are deprecated in the UI
-    
+
+    // 格式化日期用于显示（用于上次抓取时间显示）
+    formatDateForDisplay(dateString) {
+        if (!dateString) return '--';
+        try {
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                // 如果不是有效的日期字符串，直接返回原字符串
+                return dateString;
+            }
+            // 返回简洁的日期格式：2024年1月15日
+            return date.toLocaleDateString('zh-CN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        } catch (e) {
+            console.error('日期格式化失败:', e);
+            return dateString;
+        }
+    }
 };
